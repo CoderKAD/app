@@ -25,10 +25,12 @@ public interface OrderItemMapper {
 
     @Mapping(target = "orderId", source = "order.id")
     @Mapping(target = "menuItemId", source = "menuItem.id")
+    @Mapping(target = "menuItemName", source = "menuItem.name")
     OrderItemResponseDto toDto(OrderItem entity);
 
     @Mapping(target = "orderId", source = "order.id")
     @Mapping(target = "menuItemId", source = "menuItem.id")
+    @Mapping(target = "menuItemName", source = "menuItem.name")
     List<OrderItemResponseDto> toDto(List<OrderItem> entity);
 
     @Named("mapOrderId")

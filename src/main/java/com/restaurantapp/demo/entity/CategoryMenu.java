@@ -19,7 +19,7 @@ import java.util.UUID;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "categories_menu")
+@Table(name = "categories_menu", indexes = { @Index(name = "idx_categories_menu_name", columnList = "category_name"), @Index(name = "idx_categories_menu_active", columnList = "active") })
 @EntityListeners(AuditingEntityListener.class)
 public class CategoryMenu {
     @Id
@@ -31,7 +31,9 @@ public class CategoryMenu {
 
     @NotNull
     @Column(name = "sort_order" , unique = true)
+    @Positive(message = "sortOrder must be a positive number (greater than 0)")
     private Integer sortOrder;
+
 
     @NotNull
     private Boolean active;

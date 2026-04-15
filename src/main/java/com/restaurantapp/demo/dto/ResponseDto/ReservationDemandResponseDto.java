@@ -15,12 +15,12 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ReservationDemandResponseDto {
-    private Long id;
+    private UUID id;
     private DemandStatus status;
     @JsonFormat(pattern = "dd-MM-yyyy")
     private LocalDateTime createdAt;
     @JsonFormat(pattern = "dd-MM-yyyy")
     private LocalDateTime updatedAt;
-    private Long reservationId;
+    private UUID reservationId;
     private UUID customerId;
 }

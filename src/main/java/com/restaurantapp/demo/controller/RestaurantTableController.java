@@ -5,10 +5,11 @@ import com.restaurantapp.demo.dto.requestDto.RestaurantTableRequestDto;
 import com.restaurantapp.demo.service.RestaurantTableService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
+
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/tables")
@@ -20,19 +21,16 @@ public class RestaurantTableController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<RestaurantTableResponseDto>> getAllTables() {
         return ResponseEntity.ok(restaurantTableService.getAllTables());
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<RestaurantTableResponseDto> getTableById(@PathVariable Long id) {
+    public ResponseEntity<RestaurantTableResponseDto> getTableById(@PathVariable UUID id) {
         return ResponseEntity.ok(restaurantTableService.getTableById(id));
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<RestaurantTableResponseDto> createTable(
             @Valid @RequestBody RestaurantTableRequestDto dto
     ) {
@@ -40,17 +38,15 @@ public class RestaurantTableController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<RestaurantTableResponseDto> updateTable(
-            @PathVariable Long id,
+            @PathVariable UUID id,
             @Valid @RequestBody RestaurantTableRequestDto dto
     ) {
         return ResponseEntity.ok(restaurantTableService.updateTable(id, dto));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> deleteTable(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteTable(@PathVariable UUID id) {
         restaurantTableService.deleteTable(id);
         return ResponseEntity.noContent().build();
     }

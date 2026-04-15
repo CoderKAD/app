@@ -32,17 +32,20 @@ public interface OrderMapper {
     @Mapping(target = "createdById", source = "createdBy.id")
     @Mapping(target = "updatedById", source = "updatedBy.id")
     @Mapping(target = "deliveryAddress", source = "deliveryAddress")
+    @Mapping(target = "phone", source = "phone")
     @Mapping(target = "orderItems", source = "orderItems")
     OrderResponseDto toDto(Order entity);
 
     @Mapping(target = "restaurantTableId", source = "restaurantTable.id")
     @Mapping(target = "createdById", source = "createdBy.id")
     @Mapping(target = "updatedById", source = "updatedBy.id")
+    @Mapping(target = "deliveryAddress", source = "deliveryAddress")
+    @Mapping(target = "phone", source = "phone")
     @Mapping(target = "orderItems", source = "orderItems")
     List<OrderResponseDto> toDto(List<Order> entity);
 
     @Named("mapRestaurantTableId")
-    default RestaurantTable mapRestaurantTableId(Long restaurantTableId) {
+    default RestaurantTable mapRestaurantTableId(UUID restaurantTableId) {
         if (restaurantTableId == null) {
             return null;
         }

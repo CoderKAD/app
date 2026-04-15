@@ -14,7 +14,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class OrderItemResponseDto {
-    private Long id;
+    private UUID id;
     private Integer quantity;
     private String notes;
     @JsonFormat(pattern = "dd-MM-yyyy")
@@ -23,4 +23,5 @@ public class OrderItemResponseDto {
     private LocalDateTime updatedAt;
     private UUID orderId;
     private UUID menuItemId;
+    private String menuItemName;
 }

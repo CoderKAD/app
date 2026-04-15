@@ -5,7 +5,7 @@ import com.restaurantapp.demo.dto.requestDto.StaffRequestDto;
 import com.restaurantapp.demo.service.StaffCustomerService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
+
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,19 +21,16 @@ public class StaffCustomerController {
     }
 
     @GetMapping("/staff")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<StaffResponseDto>> getAllStaff() {
         return ResponseEntity.ok(staffCustomerService.getAllStaff());
     }
 
     @PostMapping("/staff")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<StaffResponseDto> createStaff(@Valid @RequestBody StaffRequestDto dto) {
         return ResponseEntity.ok(staffCustomerService.createStaff(dto));
     }
 
     @PutMapping("/staff/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<StaffResponseDto> updateStaff(
             @PathVariable UUID id,
             @Valid @RequestBody StaffRequestDto dto
@@ -42,7 +39,6 @@ public class StaffCustomerController {
     }
 
     @DeleteMapping("/staff/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteStaff(@PathVariable UUID id) {
         staffCustomerService.deleteStaff(id);
         return ResponseEntity.noContent().build();

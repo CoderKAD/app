@@ -7,7 +7,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -17,17 +16,31 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ReservationResponseDto {
-    private Long id;
-    private Integer partySize;
-    private LocalDate startAt;
-    private LocalDate endAt;
+    private UUID id;
+    
+    private Integer numberOfPeople;
+    private String reservationCode;
+    private String customerName;
+    private String customerPhone;
+    private String emailCustomer;
+    
+    @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
+    private LocalDateTime startAt;
+    
+    @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
+    private LocalDateTime endAt;
+    
+    private Integer durationReservation;
     private ReservationStatus status;
     private String notes;
-    @JsonFormat(pattern = "dd-MM-yyyy")
+    
+    @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
     private LocalDateTime createdAt;
-    @JsonFormat(pattern = "dd-MM-yyyy")
+    
+    @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
     private LocalDateTime updatedAt;
+    
     private UUID createdById;
     private UUID updatedById;
-    private List<Long> tableIds;
+    private List<UUID> tableIds;
 }

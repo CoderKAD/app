@@ -24,12 +24,14 @@ public class OrderResponseDto {
     private OrderStatus status;
     private String notes;
     private String deliveryAddress;
+    private String phone;
+
     @JsonFormat(pattern = "dd-MM-yyyy")
     private LocalDateTime createdAt;
     @JsonFormat(pattern = "dd-MM-yyyy")
     private LocalDateTime updatedAt;
     @JsonFormat(pattern = "dd-MM-yyyy")
-    private Long restaurantTableId;
+    private UUID restaurantTableId;
     private UUID createdById;
     private UUID updatedById;
     private List<OrderItemResponseDto> orderItems;

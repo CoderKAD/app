@@ -11,9 +11,10 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
-@Table(name = "reservation_request")
+@Table(name = "reservation_request", indexes = { @Index(name = "idx_reservation_request_reservation", columnList = "reservation_id"), @Index(name = "idx_reservation_request_user", columnList = "user_id"), @Index(name = "idx_reservation_request_status", columnList = "status"), @Index(name = "idx_reservation_request_created_at", columnList = "created_at") })
 @Getter
 @Setter
 @NoArgsConstructor
@@ -23,8 +24,8 @@ import java.time.LocalDateTime;
 public class ReservationDemand {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
     @Enumerated(EnumType.STRING)
     private DemandStatus status;

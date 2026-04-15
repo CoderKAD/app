@@ -11,9 +11,10 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
-@Table(name = "order_items")
+@Table(name = "order_items", indexes = { @Index(name = "idx_order_items_order", columnList = "order_id"), @Index(name = "idx_order_items_menu_item", columnList = "menu_item_id"), @Index(name = "idx_order_items_created_at", columnList = "created_at") })
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,8 +23,8 @@ import java.time.LocalDateTime;
 public class OrderItem {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(generator = "UUID")
+    private UUID id;
 
     @NotNull(message = "Quantity is required")
     @Min(value = 1, message = "Quantity must be at least 1")

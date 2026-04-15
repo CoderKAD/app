@@ -15,7 +15,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RestaurantTableResponseDto {
-    private Long id;
+    private UUID id;
     private String label;
     private Integer seats;
     private String publicCode;

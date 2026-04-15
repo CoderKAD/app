@@ -26,11 +26,6 @@ public class OrderController {
         return ResponseEntity.ok(orderManagementService.getAllOrders());
     }
 
-    @GetMapping("/with-items")
-    public ResponseEntity<List<OrderResponseDto>> getAllOrdersWithItems() {
-        return ResponseEntity.ok(orderManagementService.getAllOrdersWithItems());
-    }
-
     @GetMapping("/{id}")
     public ResponseEntity<OrderResponseDto> getOrderById(@PathVariable UUID id) {
         return ResponseEntity.ok(orderManagementService.getOrderById(id));
@@ -63,7 +58,7 @@ public class OrderController {
     }
 
     @GetMapping("/items/{id}")
-    public ResponseEntity<OrderItemResponseDto> getOrderItemById(@PathVariable Long id) {
+    public ResponseEntity<OrderItemResponseDto> getOrderItemById(@PathVariable UUID id) {
         return ResponseEntity.ok(orderManagementService.getOrderItemById(id));
     }
 
@@ -74,14 +69,14 @@ public class OrderController {
 
     @PutMapping("/items/{id}")
     public ResponseEntity<OrderItemResponseDto> updateOrderItem(
-            @PathVariable Long id,
+            @PathVariable UUID id,
             @Valid @RequestBody OrderItemRequestDto dto
     ) {
         return ResponseEntity.ok(orderManagementService.updateOrderItem(id, dto));
     }
 
     @DeleteMapping("/items/{id}")
-    public ResponseEntity<Void> deleteOrderItem(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteOrderItem(@PathVariable UUID id) {
         orderManagementService.deleteOrderItem(id);
         return ResponseEntity.noContent().build();
     }

@@ -32,11 +32,13 @@ public class OrderRequestDto {
     @Size(max = 1000, message = "Delivery address must be at most 1000 characters")
     private String deliveryAddress;
 
-    private Long restaurantTableId;
+    private UUID restaurantTableId;
     private UUID createdById;
     private UUID updatedById;
 
-    @NotBlank(message = "Phone is required")
+
     @Size(max = 20, message = "Phone must be at most 20 characters")
     private String phone;
+
+
 }

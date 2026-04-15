@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "orders")
+@Table(name = "orders", indexes = { @Index(name = "idx_orders_public_code", columnList = "public_code"), @Index(name = "idx_orders_type", columnList = "type_order"), @Index(name = "idx_orders_status", columnList = "status"), @Index(name = "idx_orders_table", columnList = "table_id"), @Index(name = "idx_orders_created_by", columnList = "created_by"), @Index(name = "idx_orders_created_at", columnList = "created_at") })
 @Getter
 @Setter
 @NoArgsConstructor
@@ -57,9 +57,10 @@ public class Order {
     @Column( name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    @NotBlank
+
     @Size(max = 20)
     private String phone;
+
 
     // Many-to-One: Table where this order is placed
     @ManyToOne

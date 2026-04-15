@@ -1,71 +1,120 @@
 package com.restaurantapp.demo.entity;
 
-
 import com.restaurantapp.demo.entity.enums.ReservationStatus;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Future;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
-@Table(name = "reservations")
+@Table(name = "reservations", indexes = {
+        @Index(name = "idx_reservations_start_at", columnList = "start_at"),
+        @Index(name = "idx_reservations_end_at", columnList = "end_at"),
+        @Index(name = "idx_reservations_customer_phone", columnList = "customer_phone"),
+        @Index(name = "idx_reservations_created_by", columnList = "created_by"),
+        @Index(name = "idx_reservations_status", columnList = "status"),
+        @Index(name = "idx_reservations_code", columnList = "reservation_code")
+})
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @EntityListeners(AuditingEntityListener.class)
-
 public class Reservation {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
-    @Column(name = "party_size")
-    private Integer partySize;
+    // -------------------------
+    // Reservation Info
+    // -------------------------
 
-    @Column(name = "start_at")
-    @Future(message = "Reservation date must be in the future")
-    private LocalDate startAt;
+    @Column(name = "reservation_code", unique = true)
+    private String reservationCode;
 
-    @Column(name = "end_at")
-    private LocalDate endAt;
+    @Min(1)
+    @Max(50)
+    @Column(name = "number_of_people", nullable = false)
+    private Integer numberOfPeople;
+
+    @NotBlank
+    @Size(min = 2, max = 50)
+    @Column(name = "customer_name", nullable = false)
+    private String customerName;
+
+    @NotBlank
+    @Size(min = 8, max = 20)
+    @Column(name = "customer_phone", nullable = false)
+    private String customerPhone;
+
+    @Email
+    @Column(name = "email_customer")
+    private String emailCustomer;
+
+    // -------------------------
+    // TIME (IMPORTANT FIX)
+    // -------------------------
+
+    @NotNull
+    @Future
+    @Column(name = "start_at", nullable = false)
+    private LocalDateTime startAt;
+
+    @NotNull
+    @Column(name = "end_at", nullable = false)
+    private LocalDateTime endAt;
+
+    @Min(1)
+    @Column(name = "duration_hours")
+    private Integer durationReservation = 1;
+
+    // -------------------------
+    // STATUS
+    // -------------------------
 
     @Enumerated(EnumType.STRING)
-    private ReservationStatus status;
+    @Column(nullable = false)
+    private ReservationStatus status = ReservationStatus.PENDING;
 
-    @Size(max = 500, message = "Notes must be at most 500 characters")
+    // -------------------------
+    // NOTES
+    // -------------------------
+
+    @Size(max = 500)
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    // -------------------------
+    // AUDIT
+    // -------------------------
+
     @CreatedDate
-    @Column( name = "created_at", nullable = false, updatable = false)
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @LastModifiedDate
-    @Column( name = "updated_at", nullable = false)
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // Many-to-One: User who created this reservation
+    // -------------------------
+    // RELATIONS
+    // -------------------------
+
     @ManyToOne
     @JoinColumn(name = "created_by")
     private User createdBy;
 
-    // Many-to-One: User who last updated this reservation
     @ManyToOne
     @JoinColumn(name = "updated_by")
     private User updatedBy;
 
-    // Many-to-Many: Tables reserved
     @ManyToMany
     @JoinTable(
             name = "reservation_tables",
@@ -74,7 +123,6 @@ public class Reservation {
     )
     private List<RestaurantTable> tables;
 
-    // One-to-Many: Demands/requests for this reservation (ADDED - CORRECTED)
-    @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL)
     private List<ReservationDemand> demands;
 }

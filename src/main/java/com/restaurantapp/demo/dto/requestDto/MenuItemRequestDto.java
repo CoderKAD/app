@@ -31,9 +31,6 @@ public class MenuItemRequestDto {
     @NotNull(message = "Active is required")
     private Boolean active;
 
-    @Size(max = 255, message = "Image URL must be at most 255 characters")
-    private String imageUrl;
-
     @Size(max = 50, message = "Prep station must be at most 50 characters")
     private String prepStation;
 

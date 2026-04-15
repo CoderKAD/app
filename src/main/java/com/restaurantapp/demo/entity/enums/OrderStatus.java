@@ -1,5 +1,9 @@
 package com.restaurantapp.demo.entity.enums;
 
 public enum OrderStatus {
-    PREPARING, READY, SERVED, CANCELLED
+    PENDING,
+    Confirmed,
+    Preparing,
+    DELIVERING,
+    CANCELLED
 }

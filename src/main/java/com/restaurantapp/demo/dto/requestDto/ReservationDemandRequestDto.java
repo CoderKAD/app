@@ -19,7 +19,7 @@ public class ReservationDemandRequestDto {
     private DemandStatus status;
 
     @NotNull(message = "Reservation id is required")
-    private Long reservationId;
+    private UUID reservationId;
 
     @NotNull(message = "User id is required")
     @JsonAlias("customerId")

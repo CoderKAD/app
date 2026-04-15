@@ -11,6 +11,7 @@ import com.restaurantapp.demo.mapper.MenuItemMapper;
 import com.restaurantapp.demo.repository.CategoryMenuRepository;
 import com.restaurantapp.demo.repository.MenuItemRepository;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.RequiredArgsConstructor;
 import org.apache.tika.Tika;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -19,154 +20,197 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.UUID;
 
+import static org.apache.commons.io.FilenameUtils.getExtension;
+
 @Service
+@RequiredArgsConstructor
 public class MenuManagementService {
 
-    private static final long MAX_FILE_SIZE_BYTES = 2L * 1024 * 1024;
-    private static final List<String> ALLOWED_MIME_TYPES = List.of("image/jpeg", "image/png", "image/jpg");
+    // ================= CONFIG =================
+    private static final long MAX_FILE_SIZE_BYTES = 1000L * 1024 * 1024;
+    private static final List<String> ALLOWED_MIME_TYPES =
+            List.of("image/jpeg", "image/png", "image/jpg");
+
+    private static final String IMAGE_STORAGE_DIR = "uploads/menu-items";
 
     private final MenuItemRepository menuItemRepository;
     private final CategoryMenuRepository categoryMenuRepository;
     private final MenuItemMapper menuItemMapper;
     private final CategoryMenuMapper categoryMenuMapper;
-    private final Path imageStorageRoot = Paths.get("uploads", "menu-items");
-    private final Tika tika = new Tika();
 
-    public MenuManagementService(MenuItemRepository menuItemRepository,
-                                 CategoryMenuRepository categoryMenuRepository,
-                                 MenuItemMapper menuItemMapper,
-                                 CategoryMenuMapper categoryMenuMapper) {
-        this.menuItemRepository = menuItemRepository;
-        this.categoryMenuRepository = categoryMenuRepository;
-        this.menuItemMapper = menuItemMapper;
-        this.categoryMenuMapper = categoryMenuMapper;
-    }
+    private final Tika tika = new Tika();
+    private final Path imageStorageRoot = Paths.get(IMAGE_STORAGE_DIR);
+
+    // ================= CATEGORY =================
 
     public List<CategoryMenuResponseDto> getAllCategories() {
         return categoryMenuMapper.toDto(categoryMenuRepository.findAll());
     }
 
     public CategoryMenuResponseDto createCategory(CategoryMenuRequestDto dto) {
-        if (categoryMenuRepository.existsByCategoryNameIgnoreCase(dto.getCategoryName())) {
-            throw new IllegalArgumentException("Category name already exists: " + dto.getCategoryName());
-        }
-        if (categoryMenuRepository.existsBySortOrder(dto.getSortOrder())) {
-            CategoryMenu lastSort = categoryMenuRepository.findTopByOrderBySortOrderDesc();
-            throw new IllegalArgumentException(
-                    "Sort order already exists: " + dto.getSortOrder() +
-                            ". Last sort order is: " + (lastSort != null ? lastSort.getSortOrder() : "none")
-            );
-        }
+        validateCategoryUniqueness(dto.getCategoryName(), dto.getSortOrder());
+
         CategoryMenu entity = categoryMenuMapper.toEntity(dto);
-        CategoryMenu saved = categoryMenuRepository.save(entity);
-        return categoryMenuMapper.toDto(saved);
+        return categoryMenuMapper.toDto(categoryMenuRepository.save(entity));
     }
 
     public CategoryMenuResponseDto updateCategory(UUID id, CategoryMenuRequestDto dto) {
-        if (categoryMenuRepository.existsByCategoryNameIgnoreCaseAndIdNot(dto.getCategoryName(), id)) {
-            throw new IllegalArgumentException("Category name already exists: " + dto.getCategoryName());
-        }
-        if (categoryMenuRepository.existsBySortOrderAndIdNot(dto.getSortOrder(), id)) {
-            throw new IllegalArgumentException("Sort order already exists: " + dto.getSortOrder());
-        }
-        CategoryMenu existing = getCategoryEntity(id);
+        validateCategoryUniquenesForUpdate(id, dto.getCategoryName(), dto.getSortOrder());
+
+        CategoryMenu existing = findCategoryById(id);
         categoryMenuMapper.updateEntity(dto, existing);
+
         return categoryMenuMapper.toDto(categoryMenuRepository.save(existing));
     }
 
     public void deleteCategory(UUID id) {
         if (!categoryMenuRepository.existsById(id)) {
-            throw new EntityNotFoundException("CategoryMenu not found with id: " + id);
+            throw new EntityNotFoundException("Category not found: " + id);
         }
         categoryMenuRepository.deleteById(id);
     }
+
+    // ================= MENU ITEMS =================
 
     public List<MenuItemResponseDto> getAllMenuItems() {
         return menuItemMapper.toDto(menuItemRepository.findAll());
     }
 
     public MenuItemResponseDto createMenuItem(MenuItemRequestDto dto, MultipartFile image) throws IOException {
+
+        CategoryMenu category = findCategoryById(dto.getCategoryId());
+
         MenuItem entity = menuItemMapper.toEntity(dto);
-        entity.setId(null);
-        entity.setCategory(getCategoryEntity(dto.getCategoryId()));
-        entity.setImageUrl(storeImage(image));
+        entity.setCategory(category);
+
+        String imageUrl = uploadImage(image);
+        entity.setImageUrl(imageUrl);
+
         return menuItemMapper.toDto(menuItemRepository.save(entity));
     }
 
     public MenuItemResponseDto updateMenuItem(UUID id, MenuItemRequestDto dto, MultipartFile image) throws IOException {
-        MenuItem existing = getMenuItemEntity(id);
-        String oldImageUrl = existing.getImageUrl();
-        menuItemMapper.updateEntity(dto, existing);
-        existing.setCategory(getCategoryEntity(dto.getCategoryId()));
 
-        String storedPath = storeImage(image);
-        if (storedPath != null) {
-            deleteImageIfExists(oldImageUrl);
-            existing.setImageUrl(storedPath);
+        MenuItem existing = findMenuItemById(id);
+        CategoryMenu category = findCategoryById(dto.getCategoryId());
+
+        String oldImage = existing.getImageUrl();
+
+        menuItemMapper.updateEntity(dto, existing);
+        existing.setCategory(category);
+
+        if (image != null && !image.isEmpty()) {
+            deleteImageIfExists(oldImage);
+            existing.setImageUrl(uploadImage(image));
         }
 
         return menuItemMapper.toDto(menuItemRepository.save(existing));
     }
 
     public void deleteMenuItem(UUID id) {
-        MenuItem existing = getMenuItemEntity(id);
-        try {
-            deleteImageIfExists(existing.getImageUrl());
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to delete image for menu item: " + id, e);
-        }
+        MenuItem existing = findMenuItemById(id);
+
+        deleteImageIfExists(existing.getImageUrl());
         menuItemRepository.delete(existing);
     }
 
-    private CategoryMenu getCategoryEntity(UUID id) {
-        return categoryMenuRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("CategoryMenu not found with id: " + id));
-    }
+    // ================= IMAGE HANDLING (FIXED) =================
 
-    private MenuItem getMenuItemEntity(UUID id) {
-        return menuItemRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("MenuItem not found with id: " + id));
-    }
+    private String uploadImage(MultipartFile file) throws IOException {
 
-    private String storeImage(MultipartFile file) throws IOException {
-        if (file == null || file.isEmpty()) return null;
+        if (file == null || file.isEmpty()) {
+            return null;
+        }
 
         validateImage(file);
-        Files.createDirectories(imageStorageRoot);
+        ensureImageDirectoryExists();
 
-        String original = file.getOriginalFilename();
-        String extension = (original != null && original.contains(".")) ? original.substring(original.lastIndexOf('.')) : "";
+        String mimeType = tika.detect(file.getInputStream());
+
+        String extension = switch (mimeType) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/jpg" -> ".jpg";
+            default -> "";
+        };
+
         String fileName = UUID.randomUUID() + extension;
 
-        Path target = imageStorageRoot.resolve(fileName);
-        Files.copy(file.getInputStream(), target);
+        Path targetPath = imageStorageRoot.resolve(fileName).normalize();
 
-        return target.toString();
+        Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+        return "/uploads/menu-items/" + fileName;
+    }
+
+    private void deleteImageIfExists(String imageUrl) {
+        if (imageUrl == null || imageUrl.isBlank()) return;
+
+        try {
+            String fileName = imageUrl.substring(imageUrl.lastIndexOf("/") + 1);
+            Path filePath = imageStorageRoot.resolve(fileName).normalize();
+
+            Files.deleteIfExists(filePath);
+
+        } catch (Exception e) {
+            System.err.println("Delete image error: " + e.getMessage());
+        }
+    }
+
+    private void ensureImageDirectoryExists() throws IOException {
+        if (!Files.exists(imageStorageRoot)) {
+            Files.createDirectories(imageStorageRoot);
+        }
     }
 
     private void validateImage(MultipartFile file) throws IOException {
-        String mimeType = tika.detect(file.getInputStream(), file.getOriginalFilename());
-
-        if (!ALLOWED_MIME_TYPES.contains(mimeType)) {
-            throw new IllegalArgumentException("Invalid file type. Allowed types: " + ALLOWED_MIME_TYPES);
-        }
 
         if (file.getSize() > MAX_FILE_SIZE_BYTES) {
-            throw new IllegalArgumentException("File is too large. Maximum allowed size: " + MAX_FILE_SIZE_BYTES + " bytes.");
+            throw new IllegalArgumentException("File too large (max 1000MB)");
+        }
+
+        String mimeType = tika.detect(file.getInputStream());
+
+        if (!ALLOWED_MIME_TYPES.contains(mimeType)) {
+            throw new IllegalArgumentException("Invalid image type: " + mimeType);
         }
     }
 
-    private void deleteImageIfExists(String imageUrl) throws IOException {
-        if (imageUrl == null || imageUrl.isBlank()) {
-            return;
+    // ================= CATEGORY VALIDATION =================
+
+    private void validateCategoryUniqueness(String name, Integer sortOrder) {
+        if (categoryMenuRepository.existsByCategoryNameIgnoreCase(name)) {
+            throw new IllegalArgumentException("Category already exists: " + name);
         }
-        Path oldPath = Paths.get(imageUrl);
-        if (Files.exists(oldPath)) {
-            Files.deleteIfExists(oldPath);
+
+        if (categoryMenuRepository.existsBySortOrder(sortOrder)) {
+            throw new IllegalArgumentException("Sort order already exists: " + sortOrder);
         }
     }
 
+    private void validateCategoryUniquenesForUpdate(UUID id, String name, Integer sortOrder) {
+        if (categoryMenuRepository.existsByCategoryNameIgnoreCaseAndIdNot(name, id)) {
+            throw new IllegalArgumentException("Category already exists: " + name);
+        }
+
+        if (categoryMenuRepository.existsBySortOrderAndIdNot(sortOrder, id)) {
+            throw new IllegalArgumentException("Sort order already exists: " + sortOrder);
+        }
+    }
+
+    // ================= FINDERS =================
+
+    private CategoryMenu findCategoryById(UUID id) {
+        return categoryMenuRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Category not found: " + id));
+    }
+
+    private MenuItem findMenuItemById(UUID id) {
+        return menuItemRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Menu item not found: " + id));
+    }
 }

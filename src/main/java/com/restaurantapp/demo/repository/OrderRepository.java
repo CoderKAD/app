@@ -11,9 +11,9 @@ import java.util.UUID;
 public interface OrderRepository extends JpaRepository<Order, UUID> {
     boolean existsByPublicCode(String publicCode);
 
-    @EntityGraph(attributePaths = {"orderItems"})
+    @EntityGraph(attributePaths = {"orderItems", "orderItems.menuItem"})
     List<Order> findAllBy();
 
-    @EntityGraph(attributePaths = {"orderItems"})
+    @EntityGraph(attributePaths = {"orderItems", "orderItems.menuItem"})
     Optional<Order> findById(UUID id);
 }

@@ -6,38 +6,28 @@ import com.restaurantapp.demo.dto.requestDto.auth.RegisterRequest;
 import com.restaurantapp.demo.entity.User;
 import com.restaurantapp.demo.entity.enums.Role;
 import com.restaurantapp.demo.repository.UserRepository;
-import com.restaurantapp.demo.util.JwtUtil;
+
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
+
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalTime;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtUtil jwtUtil;
 
-    public AuthController(AuthenticationManager authenticationManager,
-                          UserRepository userRepository,
-                          PasswordEncoder passwordEncoder,
-                          JwtUtil jwtUtil) {
-        this.authenticationManager = authenticationManager;
+    public AuthController(UserRepository userRepository,
+                          PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.jwtUtil = jwtUtil;
     }
 
     @PostMapping("/register")
@@ -54,18 +44,22 @@ public class AuthController {
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setRoles(request.getRole() == null ? Role.CUSTOMER : request.getRole());
         User saved = userRepository.save(user);
-        String token = jwtUtil.generateToken(saved.getUsername(), saved.getRoles());
-        return ResponseEntity.status(HttpStatus.CREATED).body(new LoginResponse(token, saved.getRoles()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(new LoginResponse(null, saved.getRoles()));
     }
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        Authentication auth = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
-        );
         User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-        String token = jwtUtil.generateToken(user.getUsername(), user.getRoles());
-        return ResponseEntity.ok(new LoginResponse(token, user.getRoles()));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials"));
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+        }
+        return ResponseEntity.ok(new LoginResponse(null, user.getRoles()));
+    }
+    @GetMapping("/test")
+    public LocalTime test() {
+        LocalTime open = LocalTime.of(10, 0);
+        System.out.println(open);
+        return open;
     }
 }

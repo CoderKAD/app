@@ -12,9 +12,10 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
-@Table(name = "restaurant_tables")
+@Table(name = "restaurant_tables", indexes = { @Index(name = "idx_tables_public_code", columnList = "public_code"), @Index(name = "idx_tables_user", columnList = "user_id"), @Index(name = "idx_tables_active", columnList = "active"), @Index(name = "idx_tables_status", columnList = "status"), @Index(name = "idx_tables_seats", columnList = "seats") })
 @Getter
 @Setter
 @NoArgsConstructor
@@ -24,8 +25,8 @@ import java.util.List;
 public class RestaurantTable {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
     @NotBlank(message = "Label is required")
     @Size(min = 2, max = 50, message = "Label must be between 2 and 50 characters")
