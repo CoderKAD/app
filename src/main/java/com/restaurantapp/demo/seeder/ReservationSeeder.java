@@ -1,28 +1,23 @@
 package com.restaurantapp.demo.seeder;
 
-import com.google.i18n.phonenumbers.NumberParseException;
-import com.google.i18n.phonenumbers.PhoneNumberUtil;
-import com.google.i18n.phonenumbers.Phonenumber;
 import com.restaurantapp.demo.entity.Reservation;
 import com.restaurantapp.demo.entity.RestaurantTable;
 import com.restaurantapp.demo.entity.User;
 import com.restaurantapp.demo.entity.enums.ReservationStatus;
 import com.restaurantapp.demo.repository.ReservationRepository;
+import com.restaurantapp.demo.util.PublicCodeGenerator;
 import net.datafaker.Faker;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Collections;
-import java.util.Comparator;
 
 @Component
 public class ReservationSeeder {
 
-    private static final int DEFAULT_RESERVATION_COUNT = 8;
+    private static final int DEFAULT_RESERVATION_COUNT = 16;
 
     private final ReservationRepository reservationRepository;
     private final Faker faker;
@@ -41,72 +36,70 @@ public class ReservationSeeder {
             return Collections.emptyList();
         }
 
-        List<Reservation> saved = new ArrayList<>();
+        List<Reservation> reservations = new ArrayList<>();
         ReservationStatus[] statuses = ReservationStatus.values();
-        PhoneNumberUtil phoneUtil = PhoneNumberUtil.getInstance();
+        LocalDateTime baseStart = LocalDateTime.now().plusDays(1).withMinute(0).withSecond(0).withNano(0);
 
         for (int index = 0; index < DEFAULT_RESERVATION_COUNT; index++) {
-            LocalDate startDate = LocalDate.now().plusDays(index + 1L);
-            // choose an hour between 10 and 21 so that endAt (start+2h) <= 23
-            int hour = 10 + (index % 12); // will produce hours 10..21 repeatedly
-            LocalDateTime startAt = startDate.atTime(hour, 0);
-
-            User owner = users.get(index % users.size());
-
-            int partySizeCandidate = faker.number().numberBetween(1, 6);
+            Reservation reservation = new Reservation();
+            int durationMinutes = faker.options().option(60, 90, 120, 180);
+            int people = faker.options().option(2, 4, 4, 6, 8, 10);
+            LocalDateTime startAt = baseStart.plusDays(index % 10L).plusHours(11 + (index % 6));
+            LocalDateTime endAt = startAt.plusMinutes(durationMinutes);
             ReservationStatus status = statuses[index % statuses.length];
 
-            // try to find an available table for this startAt
-            boolean created = false;
+            reservation.setReservationCode(
+                    PublicCodeGenerator.generateReservationCode(
+                            reservationRepository.count() + index + 1L,
+                            reservationRepository::existsByReservationCode));
+            reservation.setNumberOfPeople(people);
+            reservation.setCustomerName(faker.name().firstName() + " " + faker.name().lastName());
+            reservation.setCustomerPhone(String.format("06%08d", faker.number().numberBetween(0, 100000000)));
+            reservation.setEmailCustomer(faker.internet().emailAddress());
+            reservation.setStartAt(startAt);
+            reservation.setEndAt(endAt);
+            reservation.setDurationMinutes(durationMinutes);
+            reservation.setStatus(status);
+            reservation.setNotes(faker.lorem().sentence(10));
+            reservation.setBufferTimeMinutes(faker.options().option(15, 20, 30, 45));
+            reservation.setCreatedBy(users.get(index % users.size()));
+            reservation.setUpdatedBy(users.get((index + 1) % users.size()));
+            reservation.setTables(selectTables(tables, people, index));
+            applyStatusTimestamps(reservation, status, startAt, endAt);
+            reservations.add(reservation);
+        }
 
-            // sort tables to make selection deterministic
-            List<RestaurantTable> sortedTables = new ArrayList<>(tables);
-            sortedTables.sort(Comparator.comparing(RestaurantTable::getLabel));
+        return reservationRepository.saveAll(reservations);
+    }
 
-            for (RestaurantTable table : sortedTables) {
-                if (!Boolean.TRUE.equals(table.getActive())) continue;
-                if (table.getSeats() == null || table.getSeats() < partySizeCandidate) continue;
+    private List<RestaurantTable> selectTables(List<RestaurantTable> tables, int people, int index) {
+        List<RestaurantTable> selectedTables = new ArrayList<>();
+        RestaurantTable primaryTable = tables.get(index % tables.size());
+        selectedTables.add(primaryTable);
 
-                // overlap check window
-                LocalDateTime startWindow = startAt.minusHours(2);
-                LocalDateTime endAt = startAt.plusHours(2);
-                List<Reservation> overlaps = reservationRepository.findOverlappingReservations(table.getId(), startWindow, endAt);
-                if (overlaps == null || overlaps.isEmpty()) {
-                    Reservation reservation = new Reservation();
-                    reservation.setPartySize(partySizeCandidate);
-                    reservation.setStartAt(startAt);
-                    reservation.setStatus(status);
-                    reservation.setNotes(faker.lorem().sentence(6));
-                    reservation.setCustomerName(faker.name().fullName());
-
-                    // generate phone (local) then normalize to E.164 for Morocco
-                    String rawPhone = (faker.number().numberBetween(0,1) == 0 ? "06" : "07") + faker.number().digits(8);
-                    try {
-                        Phonenumber.PhoneNumber pn = phoneUtil.parse(rawPhone, "MA");
-                        if (phoneUtil.isValidNumberForRegion(pn, "MA")) {
-                            reservation.setCustomerPhone(phoneUtil.format(pn, PhoneNumberUtil.PhoneNumberFormat.E164));
-                        } else {
-                            reservation.setCustomerPhone(rawPhone);
-                        }
-                    } catch (NumberParseException e) {
-                        reservation.setCustomerPhone(rawPhone);
-                    }
-
-                    reservation.setCreatedBy(owner);
-                    reservation.setUpdatedBy(users.get((index + 1) % users.size()));
-                    reservation.setTables(List.of(table));
-
-                    saved.add(reservationRepository.save(reservation));
-                    created = true;
-                    break;
-                }
-            }
-
-            if (!created) {
-                // cannot place this reservation, skip or log — we'll skip
+        if (people > 6 && tables.size() > 1) {
+            RestaurantTable secondaryTable = tables.get((index + 1) % tables.size());
+            if (!secondaryTable.getId().equals(primaryTable.getId())) {
+                selectedTables.add(secondaryTable);
             }
         }
 
-        return saved;
+        return selectedTables;
+    }
+
+    private void applyStatusTimestamps(Reservation reservation,
+                                       ReservationStatus status,
+                                       LocalDateTime startAt,
+                                       LocalDateTime endAt) {
+        if (status == ReservationStatus.CONFIRMED) {
+            reservation.setConfirmedAt(startAt.minusHours(2));
+        } else if (status == ReservationStatus.CANCELLED) {
+            reservation.setCancelledAt(startAt.minusHours(4));
+            reservation.setCancelReason(faker.lorem().sentence(6));
+        } else if (status == ReservationStatus.COMPLETED) {
+            reservation.setConfirmedAt(startAt.minusHours(3));
+        } else if (status == ReservationStatus.NO_SHOW) {
+            reservation.setConfirmedAt(endAt.minusHours(1));
+        }
     }
 }

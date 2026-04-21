@@ -1,5 +1,6 @@
 package com.restaurantapp.demo.dto.requestDto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.restaurantapp.demo.entity.enums.ReservationStatus;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
@@ -29,8 +30,17 @@ public class ReservationRequestDto {
     @NotNull(message = "Reservation end datetime is required")
     private LocalDateTime endAt;
 
-    @Min(value = 1, message = "Duration must be at least 1 hour")
-    private Integer durationReservation = 1;
+    @JsonIgnore
+    @AssertTrue(message = "Reservation end time must be after the start time")
+    public boolean isEndAtAfterStartAt() {
+        return startAt == null || endAt == null || endAt.isAfter(startAt);
+    }
+
+    @Min(value = 1, message = "Duration must be at least 1 minute")
+    private Integer durationMinutes = 60;
+
+    @Min(value = 0, message = "Buffer time must be zero or greater")
+    private Integer bufferTimeMinutes = 30;
 
     @NotNull(message = "Reservation status is required")
     private ReservationStatus status = ReservationStatus.PENDING;

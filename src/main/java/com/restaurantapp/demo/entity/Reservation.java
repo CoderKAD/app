@@ -71,9 +71,9 @@ public class Reservation {
     @Column(name = "end_at", nullable = false)
     private LocalDateTime endAt;
 
-    @Min(1)
-    @Column(name = "duration_hours")
-    private Integer durationReservation = 1;
+    @Min(60)
+    @Column(name = "duration_minutes")
+    private Integer durationMinutes = 60;
 
     // -------------------------
     // STATUS
@@ -102,6 +102,18 @@ public class Reservation {
     @LastModifiedDate
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "confirmed_at")
+    private LocalDateTime confirmedAt;
+
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    @Column(name = "cancel_reason")
+    private String cancelReason;
+
+    @Column(name = "buffer_time_minutes")
+    private Integer bufferTimeMinutes = 30;
 
     // -------------------------
     // RELATIONS

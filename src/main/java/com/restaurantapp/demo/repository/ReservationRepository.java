@@ -12,8 +12,15 @@ import java.util.List;
 
 public interface ReservationRepository extends JpaRepository<Reservation, UUID> {
 
-    @Query("SELECT r FROM Reservation r JOIN r.tables t WHERE t.id = :tableId AND r.startAt > :startWindow AND r.startAt < :endAt")
+    boolean existsByReservationCode(String reservationCode);
+
+    @Query("SELECT r FROM Reservation r JOIN r.tables t WHERE t.id = :tableId AND r.startAt < :endAt AND r.endAt > :startAt")
     List<Reservation> findOverlappingReservations(@Param("tableId") UUID tableId,
-                                                  @Param("startWindow") LocalDateTime startWindow,
+                                                  @Param("startAt") LocalDateTime startAt,
                                                   @Param("endAt") LocalDateTime endAt);
+
+    @Query("SELECT DISTINCT r FROM Reservation r JOIN r.tables t WHERE t.id IN :tableIds AND r.startAt < :endAt AND r.endAt > :startAt")
+    List<Reservation> findOverlappingReservationsForTables(@Param("tableIds") List<UUID> tableIds,
+                                                            @Param("startAt") LocalDateTime startAt,
+                                                            @Param("endAt") LocalDateTime endAt);
 }

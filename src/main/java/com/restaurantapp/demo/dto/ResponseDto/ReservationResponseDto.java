@@ -30,16 +30,26 @@ public class ReservationResponseDto {
     @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
     private LocalDateTime endAt;
     
-    private Integer durationReservation;
+    private Integer durationMinutes;
     private ReservationStatus status;
     private String notes;
-    
+
+    @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
+    private LocalDateTime confirmedAt;
+
+    @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
+    private LocalDateTime cancelledAt;
+
+    private String cancelReason;
+
     @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
     private LocalDateTime createdAt;
-    
+
     @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
     private LocalDateTime updatedAt;
     
+    private Integer bufferTimeMinutes;
+
     private UUID createdById;
     private UUID updatedById;
     private List<UUID> tableIds;
