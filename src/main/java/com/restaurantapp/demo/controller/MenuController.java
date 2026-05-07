@@ -7,7 +7,6 @@ import com.restaurantapp.demo.dto.requestDto.MenuItemRequestDto;
 import com.restaurantapp.demo.service.MenuManagementService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +17,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
-@Slf4j
 @RestController
 @RequestMapping("/api/menu")
 @RequiredArgsConstructor
@@ -69,7 +67,8 @@ public class MenuController {
             @RequestParam(value = "image", required = false) MultipartFile image
     ) throws IOException {
 
-        return ResponseEntity.ok(menuManagementService.createMenuItem(dto, image));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(menuManagementService.createMenuItem(dto, image));
     }
 
 
@@ -84,10 +83,10 @@ public class MenuController {
         return ResponseEntity.ok(menuManagementService.updateMenuItem(id, dto, image));
     }
 
-
     @DeleteMapping("/items/{id}")
     public ResponseEntity<Void> deleteMenuItem(@PathVariable UUID id) {
         menuManagementService.deleteMenuItem(id);
         return ResponseEntity.noContent().build();
     }
+
 }

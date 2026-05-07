@@ -24,4 +24,5 @@ public class OrderItemResponseDto {
     private UUID orderId;
     private UUID menuItemId;
     private String menuItemName;
+    private double price;
 }

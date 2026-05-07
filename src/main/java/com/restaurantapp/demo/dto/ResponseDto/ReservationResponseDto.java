@@ -16,21 +16,20 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ReservationResponseDto {
-    private UUID id;
-    
+    private UUID reservationId;
     private Integer numberOfPeople;
     private String reservationCode;
     private String customerName;
     private String customerPhone;
     private String emailCustomer;
-    
+
     @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
     private LocalDateTime startAt;
-    
+
     @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
     private LocalDateTime endAt;
-    
-    private Integer durationMinutes;
+
+    private Integer durationReservationMinutes;
     private ReservationStatus status;
     private String notes;
 
@@ -47,10 +46,8 @@ public class ReservationResponseDto {
 
     @JsonFormat(pattern = "dd-MM-yyyy HH:mm")
     private LocalDateTime updatedAt;
-    
-    private Integer bufferTimeMinutes;
 
     private UUID createdById;
     private UUID updatedById;
-    private List<UUID> tableIds;
+    private List<ReservationSelectedTableDto> selectedTables;
 }

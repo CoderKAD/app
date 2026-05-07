@@ -13,13 +13,18 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "menu_items", indexes = { @Index(name = "idx_menu_items_category", columnList = "category_id"), @Index(name = "idx_menu_items_active", columnList = "active"), @Index(name = "idx_menu_items_name", columnList = "name") })
+@Table(name = "menu_items",
+        indexes = { @Index(name = "idx_menu_items_category",
+                columnList = "category_id"),
+                @Index(name = "idx_menu_items_active", columnList = "active"),
+                @Index(name = "idx_menu_items_name", columnList = "name") })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @EntityListeners(AuditingEntityListener.class)
 public class MenuItem {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -36,12 +41,12 @@ public class MenuItem {
     @DecimalMin(value = "0.0", inclusive = false, message = "Price must be greater than 0")
     private Double price;
 
-    private Boolean active;
+    private Boolean active=true;
 
     @Column(name = "image_url", nullable = true)
     private String imageUrl;
 
-    @Size(max = 50, message = "Prep station must be at most 50 characters")
+    @Size(max = 100, message = "Prep station must be at most 50 characters")
     @Column(name = "prep_station")
     private String prepStation;
 

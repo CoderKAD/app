@@ -19,12 +19,12 @@ import java.util.UUID;
 @AllArgsConstructor
 public class OrderRequestDto {
     @NotNull(message = "Order type is required")
-    private OrderType typeOrder;
+    private OrderType typeOrder ;
 
     @NotNull(message = "Order status is required")
-    private OrderStatus status;
+    private OrderStatus status =OrderStatus.PENDING;
 
-    private PaymentStatus paymentStatus;
+    private PaymentStatus paymentStatus=PaymentStatus.PENDING;
 
     @Size(max = 500, message = "Notes must be at most 500 characters")
     private String notes;
@@ -35,8 +35,6 @@ public class OrderRequestDto {
     private UUID restaurantTableId;
     private UUID createdById;
     private UUID updatedById;
-
-
     @Size(max = 20, message = "Phone must be at most 20 characters")
     private String phone;
 

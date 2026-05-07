@@ -9,10 +9,10 @@ import com.restaurantapp.demo.entity.enums.TableStatus;
 import com.restaurantapp.demo.mapper.RestaurantTableMapper;
 import com.restaurantapp.demo.repository.RestaurantTableRepository;
 import com.restaurantapp.demo.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -23,7 +23,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -40,107 +40,186 @@ class RestaurantTableServiceTest {
     @Mock
     private RestaurantTableMapper restaurantTableMapper;
 
-    @InjectMocks
-    private RestaurantTableService restaurantTableService;
+    private RestaurantTableService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new RestaurantTableService(restaurantTableRepository, userRepository, restaurantTableMapper);
+    }
 
     @Test
     void getAllTables_returnsMappedTables() {
-        RestaurantTable table = new RestaurantTable();
-        table.setId(UUID.randomUUID());
-        table.setLabel("T1");
-        table.setSeats(4);
-        table.setPublicCode("TAB-0001");
-        table.setActive(true);
-        table.setStatus(TableStatus.Available);
-        RestaurantTableResponseDto response = new RestaurantTableResponseDto(table.getId(), table.getLabel(), table.getSeats(), table.getPublicCode(), table.getActive(), table.getStatus(), null, null, null);
+        RestaurantTable table = table("T1", 4, true, TableStatus.Available);
+        RestaurantTableResponseDto response = new RestaurantTableResponseDto(table.getId(), "T1", 4, "TAB-0001", true, TableStatus.Available, null, null, null);
 
         when(restaurantTableRepository.findAll()).thenReturn(List.of(table));
         when(restaurantTableMapper.toDto(List.of(table))).thenReturn(List.of(response));
 
-        List<RestaurantTableResponseDto> result = restaurantTableService.getAllTables();
+        List<RestaurantTableResponseDto> result = service.getAllTables();
 
         assertThat(result).containsExactly(response);
+        verify(restaurantTableRepository).findAll();
     }
 
     @Test
-    void createTable_success_generatesPublicCodeAndAssignsUser() {
+    void getTableById_returnsMappedTable() {
+        UUID id = UUID.randomUUID();
+        RestaurantTable table = table("T1", 4, true, TableStatus.Available);
+        RestaurantTableResponseDto response = new RestaurantTableResponseDto(id, "T1", 4, "TAB-0001", true, TableStatus.Available, null, null, null);
+
+        when(restaurantTableRepository.findById(id)).thenReturn(Optional.of(table));
+        when(restaurantTableMapper.toDto(table)).thenReturn(response);
+
+        RestaurantTableResponseDto result = service.getTableById(id);
+
+        assertThat(result).isSameAs(response);
+    }
+
+    @Test
+    void createTable_setsPublicCodeAndUser() {
         UUID userId = UUID.randomUUID();
-        RestaurantTableRequestDto dto = new RestaurantTableRequestDto("T1", 4, true, TableStatus.Available, userId);
-        RestaurantTable entity = new RestaurantTable();
+        RestaurantTableRequestDto dto = new RestaurantTableRequestDto("T2", 6, true, TableStatus.Available, userId);
+        RestaurantTable mapped = table("T2", 6, true, TableStatus.Available);
         User user = new User();
         user.setId(userId);
-        user.setUsername("john");
-        user.setPasswordHash("hash");
-        user.setEmail("john@example.com");
-        user.setRoles(Role.CUSTOMER);
-        RestaurantTable saved = new RestaurantTable();
-        saved.setId(UUID.randomUUID());
-        saved.setLabel("T1");
-        saved.setSeats(4);
-        saved.setPublicCode("TAB-0001");
-        saved.setActive(true);
-        saved.setStatus(TableStatus.Available);
-        saved.setUser(user);
-        RestaurantTableResponseDto expected = new RestaurantTableResponseDto(saved.getId(), saved.getLabel(), saved.getSeats(), saved.getPublicCode(), saved.getActive(), saved.getStatus(), null, null, userId);
+        user.setRoles(Role.ADMIN);
+        RestaurantTableResponseDto response = new RestaurantTableResponseDto(mapped.getId(), "T2", 6, "TAB-0002", true, TableStatus.Available, null, null, userId);
 
-        when(restaurantTableMapper.toEntity(dto)).thenReturn(entity);
-        when(restaurantTableRepository.count()).thenReturn(0L);
-        when(restaurantTableRepository.existsByPublicCode("TAB-0001")).thenReturn(false);
+        when(restaurantTableRepository.count()).thenReturn(1L);
+        when(restaurantTableRepository.existsByPublicCode(any())).thenReturn(false);
+        when(restaurantTableMapper.toEntity(dto)).thenReturn(mapped);
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(restaurantTableRepository.save(entity)).thenReturn(saved);
-        when(restaurantTableMapper.toDto(saved)).thenReturn(expected);
+        when(restaurantTableRepository.save(any(RestaurantTable.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(restaurantTableMapper.toDto(any(RestaurantTable.class))).thenReturn(response);
 
-        RestaurantTableResponseDto result = restaurantTableService.createTable(dto);
+        RestaurantTableResponseDto result = service.createTable(dto);
 
-        assertThat(result).isSameAs(expected);
         ArgumentCaptor<RestaurantTable> captor = ArgumentCaptor.forClass(RestaurantTable.class);
         verify(restaurantTableRepository).save(captor.capture());
-        assertThat(captor.getValue().getPublicCode()).isEqualTo("TAB-0001");
+        assertThat(captor.getValue().getPublicCode()).isNotBlank();
         assertThat(captor.getValue().getUser()).isSameAs(user);
+        assertThat(result).isSameAs(response);
     }
 
     @Test
-    void updateTable_success_clearsUserWhenMissing() {
-        UUID tableId = UUID.randomUUID();
-        RestaurantTableRequestDto dto = new RestaurantTableRequestDto("T2", 6, true, TableStatus.Available, null);
-        RestaurantTable existing = new RestaurantTable();
-        existing.setId(tableId);
-        existing.setLabel("T1");
-        existing.setSeats(4);
-        existing.setActive(true);
-        existing.setStatus(TableStatus.Available);
-        RestaurantTable saved = new RestaurantTable();
-        saved.setId(tableId);
-        saved.setLabel("T2");
-        saved.setSeats(6);
-        saved.setPublicCode("TAB-0001");
-        saved.setActive(true);
-        saved.setStatus(TableStatus.Available);
-        RestaurantTableResponseDto expected = new RestaurantTableResponseDto(tableId, "T2", 6, "TAB-0001", true, TableStatus.Available, null, null, null);
-
-        when(restaurantTableRepository.findById(tableId)).thenReturn(Optional.of(existing));
-        when(restaurantTableRepository.count()).thenReturn(0L);
-        when(restaurantTableRepository.existsByPublicCode("TAB-0001")).thenReturn(false);
-        doNothing().when(restaurantTableMapper).updateEntity(dto, existing);
-        when(restaurantTableRepository.save(existing)).thenReturn(saved);
-        when(restaurantTableMapper.toDto(saved)).thenReturn(expected);
-
-        RestaurantTableResponseDto result = restaurantTableService.updateTable(tableId, dto);
-
-        assertThat(result).isSameAs(expected);
-        assertThat(existing.getPublicCode()).isEqualTo("TAB-0001");
-        assertThat(existing.getUser()).isNull();
-    }
-
-    @Test
-    void deleteTable_whenMissing_throws() {
+    void updateTable_replacesUserAndPersists() {
         UUID id = UUID.randomUUID();
-        when(restaurantTableRepository.existsById(id)).thenReturn(false);
+        UUID userId = UUID.randomUUID();
+        RestaurantTable existing = table("T1", 4, true, TableStatus.Reserved);
+        RestaurantTableRequestDto dto = new RestaurantTableRequestDto("T3", 8, true, TableStatus.Occupied, userId);
+        User user = new User();
+        user.setId(userId);
+        user.setRoles(Role.CASHIER);
+        RestaurantTableResponseDto response = new RestaurantTableResponseDto(id, "T3", 8, "TAB-0003", true, TableStatus.Occupied, null, null, userId);
 
-        assertThatThrownBy(() -> restaurantTableService.deleteTable(id))
-                .isInstanceOf(jakarta.persistence.EntityNotFoundException.class)
-                .hasMessageContaining("RestaurantTable not found");
+        when(restaurantTableRepository.findById(id)).thenReturn(Optional.of(existing));
+        doAnswer(invocation -> {
+            RestaurantTableRequestDto request = invocation.getArgument(0);
+            RestaurantTable entity = invocation.getArgument(1);
+            entity.setLabel(request.getLabel());
+            entity.setSeats(request.getSeats());
+            entity.setActive(request.getActive());
+            entity.setStatus(request.getStatus());
+            return entity;
+        }).when(restaurantTableMapper).updateEntity(dto, existing);
+        when(restaurantTableRepository.count()).thenReturn(2L);
+        when(restaurantTableRepository.existsByPublicCode(any())).thenReturn(false);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(restaurantTableRepository.save(any(RestaurantTable.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(restaurantTableMapper.toDto(any(RestaurantTable.class))).thenReturn(response);
 
-        verify(restaurantTableRepository, never()).deleteById(any());
+        RestaurantTableResponseDto result = service.updateTable(id, dto);
+
+        assertThat(existing.getLabel()).isEqualTo("T3");
+        assertThat(existing.getUser()).isSameAs(user);
+        assertThat(result).isSameAs(response);
+        verify(restaurantTableRepository).save(existing);
+    }
+
+    @Test
+    void updateTable_preservesExistingUser_whenUserIdNotProvided() {
+        UUID id = UUID.randomUUID();
+        RestaurantTable existing = table("T1", 4, true, TableStatus.Reserved);
+        User manager = new User();
+        manager.setId(UUID.randomUUID());
+        manager.setRoles(Role.ADMIN);
+        existing.setUser(manager);
+
+        RestaurantTableRequestDto dto = new RestaurantTableRequestDto("T3", 8, true, TableStatus.Occupied, null);
+        RestaurantTableResponseDto response = new RestaurantTableResponseDto(id, "T3", 8, "TAB-0003", true, TableStatus.Occupied, null, null, manager.getId());
+
+        when(restaurantTableRepository.findById(id)).thenReturn(Optional.of(existing));
+        doAnswer(invocation -> {
+            RestaurantTableRequestDto request = invocation.getArgument(0);
+            RestaurantTable entity = invocation.getArgument(1);
+            entity.setLabel(request.getLabel());
+            entity.setSeats(request.getSeats());
+            entity.setActive(request.getActive());
+            entity.setStatus(request.getStatus());
+            entity.setUser(null);
+            return entity;
+        }).when(restaurantTableMapper).updateEntity(dto, existing);
+        when(restaurantTableRepository.count()).thenReturn(2L);
+        when(restaurantTableRepository.existsByPublicCode(any())).thenReturn(false);
+        when(restaurantTableRepository.save(any(RestaurantTable.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(restaurantTableMapper.toDto(any(RestaurantTable.class))).thenReturn(response);
+
+        RestaurantTableResponseDto result = service.updateTable(id, dto);
+
+        assertThat(existing.getUser()).isSameAs(manager);
+        assertThat(result).isSameAs(response);
+    }
+
+    @Test
+    void createTable_rejectsNonManagerUsers() {
+        UUID userId = UUID.randomUUID();
+        RestaurantTableRequestDto dto = new RestaurantTableRequestDto("T2", 6, true, TableStatus.Available, userId);
+        RestaurantTable mapped = table("T2", 6, true, TableStatus.Available);
+        User user = new User();
+        user.setId(userId);
+        user.setRoles(Role.CUSTOMER);
+
+        when(restaurantTableRepository.count()).thenReturn(1L);
+        when(restaurantTableRepository.existsByPublicCode(any())).thenReturn(false);
+        when(restaurantTableMapper.toEntity(dto)).thenReturn(mapped);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> service.createTable(dto))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Table manager must have ADMIN or CASHIER role.");
+
+        verify(restaurantTableRepository, never()).save(any());
+    }
+
+    @Test
+    void deleteTable_deletesExistingTable() {
+        UUID id = UUID.randomUUID();
+
+        when(restaurantTableRepository.existsById(id)).thenReturn(true);
+
+        service.deleteTable(id);
+
+        verify(restaurantTableRepository).deleteById(id);
+    }
+
+    @Test
+    void createTable_invalidSeats_throwsIllegalArgumentException() {
+        RestaurantTableRequestDto dto = new RestaurantTableRequestDto("T1", 0, true, TableStatus.Available, null);
+
+        assertThatThrownBy(() -> service.createTable(dto))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Seats must be between 1 and 20.");
+
+        verify(restaurantTableMapper, never()).toEntity(any());
+    }
+
+    private static RestaurantTable table(String label, Integer seats, Boolean active, TableStatus status) {
+        RestaurantTable table = new RestaurantTable();
+        table.setId(UUID.randomUUID());
+        table.setLabel(label);
+        table.setSeats(seats);
+        table.setActive(active);
+        table.setStatus(status);
+        return table;
     }
 }

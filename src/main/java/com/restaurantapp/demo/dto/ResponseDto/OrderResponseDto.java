@@ -30,7 +30,6 @@ public class OrderResponseDto {
     private LocalDateTime createdAt;
     @JsonFormat(pattern = "dd-MM-yyyy")
     private LocalDateTime updatedAt;
-    @JsonFormat(pattern = "dd-MM-yyyy")
     private UUID restaurantTableId;
     private UUID createdById;
     private UUID updatedById;

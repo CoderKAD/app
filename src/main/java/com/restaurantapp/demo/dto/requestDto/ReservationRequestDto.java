@@ -1,15 +1,19 @@
 package com.restaurantapp.demo.dto.requestDto;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.restaurantapp.demo.entity.enums.ReservationStatus;
-import jakarta.validation.constraints.*;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -17,7 +21,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ReservationRequestDto {
-    
+
     @NotNull(message = "Number of people is required")
     @Min(value = 1, message = "At least 1 person is required")
     @Max(value = 50, message = "Maximum 50 people allowed")
@@ -27,26 +31,10 @@ public class ReservationRequestDto {
     @Future(message = "Reservation start must be in the future")
     private LocalDateTime startAt;
 
-    @NotNull(message = "Reservation end datetime is required")
-    private LocalDateTime endAt;
-
-    @JsonIgnore
-    @AssertTrue(message = "Reservation end time must be after the start time")
-    public boolean isEndAtAfterStartAt() {
-        return startAt == null || endAt == null || endAt.isAfter(startAt);
-    }
-
+    @NotNull(message = "Duration is required")
+    @JsonAlias("durationMinutes")
     @Min(value = 1, message = "Duration must be at least 1 minute")
-    private Integer durationMinutes = 60;
-
-    @Min(value = 0, message = "Buffer time must be zero or greater")
-    private Integer bufferTimeMinutes = 30;
-
-    @NotNull(message = "Reservation status is required")
-    private ReservationStatus status = ReservationStatus.PENDING;
-
-    @Size(max = 500, message = "Notes must be at most 500 characters")
-    private String notes;
+    private Integer durationReservationMinutes = 60;
 
     @NotBlank(message = "Customer name is required")
     @Size(min = 2, max = 50, message = "Customer name must be between 2 and 50 characters")
@@ -56,12 +44,13 @@ public class ReservationRequestDto {
     @Size(min = 8, max = 20, message = "Customer phone must be between 8 and 20 characters")
     private String customerPhone;
 
+    @NotBlank(message = "Customer email is required")
     @Email(message = "Customer email must be valid")
     private String emailCustomer;
 
+    @Size(max = 500, message = "Notes must be at most 500 characters")
+    private String notes;
+
     private UUID createdById;
     private UUID updatedById;
-
-    @NotEmpty(message = "At least one table id is required")
-    private List<UUID> tableIds;
 }

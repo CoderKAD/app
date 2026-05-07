@@ -1,9 +1,12 @@
 package com.restaurantapp.demo.service;
 
 import com.restaurantapp.demo.dto.ResponseDto.UserResponseDto;
+import com.restaurantapp.demo.dto.ResponseDto.UserWithRoleInfoResponseDto;
 import com.restaurantapp.demo.dto.requestDto.UserRequestDto;
+import com.restaurantapp.demo.entity.Staff;
 import com.restaurantapp.demo.entity.User;
 import com.restaurantapp.demo.entity.enums.Role;
+import com.restaurantapp.demo.mapper.StaffMapper;
 import com.restaurantapp.demo.mapper.UserMapper;
 import com.restaurantapp.demo.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -18,18 +21,27 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final StaffMapper staffMapper;
     private final PasswordEncoder passwordEncoder;
 
     public UserService(UserRepository userRepository,
                        UserMapper userMapper,
+                       StaffMapper staffMapper,
                        PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.userMapper = userMapper;
+        this.staffMapper = staffMapper;
         this.passwordEncoder = passwordEncoder;
     }
 
     public List<UserResponseDto> getAllUsers() {
         return userMapper.toDto(userRepository.findAll());
+    }
+
+    public List<UserWithRoleInfoResponseDto> getAllUsersWithRoleInfo() {
+        return userRepository.findAllWithStaff().stream()
+                .map(this::toRoleInfoResponse)
+                .toList();
     }
 
     public UserResponseDto createUser(UserRequestDto dto) {
@@ -81,5 +93,18 @@ public class UserService {
                 && userRepository.existsByUsernameAndIdNot(dto.getUsername(), id)) {
             throw new IllegalArgumentException("Username already exists: " + dto.getUsername());
         }
+    }
+
+    private UserWithRoleInfoResponseDto toRoleInfoResponse(User user) {
+        Staff staff = user.getStaff();
+        return new UserWithRoleInfoResponseDto(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getRoles(),
+                user.getCreatedAt(),
+                user.getUpdatedAt(),
+                staff == null ? null : staffMapper.toDto(staff)
+        );
     }
 }

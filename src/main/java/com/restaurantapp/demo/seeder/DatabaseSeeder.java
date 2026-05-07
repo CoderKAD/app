@@ -6,15 +6,18 @@ import com.restaurantapp.demo.entity.Order;
 import com.restaurantapp.demo.entity.Reservation;
 import com.restaurantapp.demo.entity.RestaurantTable;
 import com.restaurantapp.demo.entity.User;
+import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Component
+@RequiredArgsConstructor
 public class DatabaseSeeder implements CommandLineRunner {
 
-    private final CategoryMenuSeeder categoryMenuSeeder;
+   private final CategoryMenuSeeder categoryMenuSeeder;
     private final MenuItemSeeder menuItemSeeder;
     private final UserSeeder userSeeder;
     private final StaffSeeder staffSeeder;
@@ -24,7 +27,7 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final OrderSeeder orderSeeder;
     private final OrderItemSeeder orderItemSeeder;
 
-    public DatabaseSeeder(CategoryMenuSeeder categoryMenuSeeder,
+     /*public DatabaseSeeder(CategoryMenuSeeder categoryMenuSeeder,
                           MenuItemSeeder menuItemSeeder,
                           UserSeeder userSeeder,
                           StaffSeeder staffSeeder,
@@ -42,9 +45,10 @@ public class DatabaseSeeder implements CommandLineRunner {
         this.reservationDemandSeeder = reservationDemandSeeder;
         this.orderSeeder = orderSeeder;
         this.orderItemSeeder = orderItemSeeder;
-    }
+    }*/
 
     @Override
+    @Transactional
     public void run(String... args) {
         List<User> users = userSeeder.seed();
         staffSeeder.seed(users);

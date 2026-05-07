@@ -11,10 +11,10 @@ import com.restaurantapp.demo.mapper.StaffMapper;
 import com.restaurantapp.demo.mapper.UserMapper;
 import com.restaurantapp.demo.repository.StaffRepository;
 import com.restaurantapp.demo.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,7 +27,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -50,135 +50,210 @@ class StaffCustomerServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
-    @InjectMocks
-    private StaffCustomerService staffCustomerService;
+    private StaffCustomerService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new StaffCustomerService(staffRepository, userRepository, staffMapper, userMapper, passwordEncoder);
+    }
 
     @Test
     void getAllStaff_returnsMappedStaff() {
-        Staff staff = new Staff();
-        staff.setId(UUID.randomUUID());
-        staff.setFirstName("Jane");
-        staff.setLastName("Doe");
-        staff.setSalary(5000.0);
-        staff.setPosition("Manager");
-        staff.setDateJoined(LocalDate.of(2024, 1, 1));
-        staff.setCin("CIN1");
-        StaffResponseDto response = new StaffResponseDto(staff.getId(), staff.getFirstName(), staff.getLastName(), staff.getSalary(), staff.getPosition(), staff.getDateJoined(), staff.getDateLeft(), staff.getCin(), null, null, null);
+        Staff staff = staff("CIN-001");
+        StaffResponseDto response = new StaffResponseDto(staff.getId(), "John", "Doe", 5000.0, "Manager",
+                LocalDate.of(2024, 1, 10), null, "CIN-001", null, null, null);
 
         when(staffRepository.findAll()).thenReturn(List.of(staff));
         when(staffMapper.toDto(List.of(staff))).thenReturn(List.of(response));
 
-        List<StaffResponseDto> result = staffCustomerService.getAllStaff();
+        List<StaffResponseDto> result = service.getAllStaff();
 
         assertThat(result).containsExactly(response);
+        verify(staffRepository).findAll();
     }
 
     @Test
-    void createStaff_success_setsOptionalUser() {
-        StaffRequestDto dto = new StaffRequestDto("Jane", "Doe", 5000.0, "Manager", LocalDate.of(2024, 1, 1), null, "CIN1", null);
-        Staff entity = new Staff();
-        Staff saved = new Staff();
-        saved.setId(UUID.randomUUID());
-        saved.setFirstName("Jane");
-        saved.setLastName("Doe");
-        saved.setSalary(5000.0);
-        saved.setPosition("Manager");
-        saved.setDateJoined(LocalDate.of(2024, 1, 1));
-        saved.setCin("CIN1");
-        StaffResponseDto expected = new StaffResponseDto(saved.getId(), saved.getFirstName(), saved.getLastName(), saved.getSalary(), saved.getPosition(), saved.getDateJoined(), saved.getDateLeft(), saved.getCin(), null, null, null);
+    void createStaff_persistsWithLinkedUser() {
+        UUID userId = UUID.randomUUID();
+        StaffRequestDto dto = new StaffRequestDto("John", "Doe", 5000.0, "Manager",
+                LocalDate.of(2024, 1, 10), null, "CIN-001", userId);
+        User linkedUser = user("john", "john@example.com", Role.ADMIN);
+        Staff mapped = staff("CIN-001");
+        StaffResponseDto response = new StaffResponseDto(mapped.getId(), "John", "Doe", 5000.0, "Manager",
+                LocalDate.of(2024, 1, 10), null, "CIN-001", null, null, userId);
 
-        when(staffRepository.existsByCinIgnoreCase("CIN1")).thenReturn(false);
-        when(staffMapper.toEntity(dto)).thenReturn(entity);
-        when(staffRepository.save(entity)).thenReturn(saved);
-        when(staffMapper.toDto(saved)).thenReturn(expected);
+        when(staffRepository.existsByCinIgnoreCase(dto.getCin())).thenReturn(false);
+        when(staffMapper.toEntity(dto)).thenReturn(mapped);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(linkedUser));
+        when(staffRepository.save(any(Staff.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(staffMapper.toDto(any(Staff.class))).thenReturn(response);
 
-        StaffResponseDto result = staffCustomerService.createStaff(dto);
+        StaffResponseDto result = service.createStaff(dto);
 
-        assertThat(result).isSameAs(expected);
         ArgumentCaptor<Staff> captor = ArgumentCaptor.forClass(Staff.class);
         verify(staffRepository).save(captor.capture());
-        assertThat(captor.getValue().getUser()).isNull();
+        assertThat(captor.getValue().getCin()).isEqualTo("CIN-001");
+        assertThat(captor.getValue().getUser()).isSameAs(linkedUser);
+        assertThat(result).isSameAs(response);
     }
 
     @Test
-    void updateStaff_success_linksUser() {
+    void updateStaff_updatesExistingStaffAndRebindsUser() {
         UUID staffId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
-        Staff existing = new Staff();
-        existing.setId(staffId);
-        existing.setFirstName("Old");
-        existing.setLastName("Name");
-        existing.setSalary(4000.0);
-        existing.setPosition("Waiter");
-        existing.setDateJoined(LocalDate.of(2024, 1, 1));
-        existing.setCin("OLD");
-
-        User user = new User();
-        user.setId(userId);
-        user.setUsername("john");
-        user.setPasswordHash("hash");
-        user.setEmail("john@example.com");
-        user.setRoles(Role.CUSTOMER);
-        StaffRequestDto dto = new StaffRequestDto("Jane", "Doe", 5000.0, "Manager", LocalDate.of(2024, 2, 1), null, "CIN2", userId);
-        Staff saved = new Staff();
-        saved.setId(staffId);
-        saved.setFirstName("Jane");
-        saved.setLastName("Doe");
-        saved.setSalary(5000.0);
-        saved.setPosition("Manager");
-        saved.setDateJoined(LocalDate.of(2024, 2, 1));
-        saved.setCin("CIN2");
-        saved.setUser(user);
-        StaffResponseDto expected = new StaffResponseDto(staffId, "Jane", "Doe", 5000.0, "Manager", LocalDate.of(2024, 2, 1), null, "CIN2", null, null, userId);
+        Staff existing = staff("CIN-OLD");
+        StaffRequestDto dto = new StaffRequestDto("Jane", "Roe", 6500.0, "Supervisor",
+                LocalDate.of(2024, 2, 1), null, "CIN-NEW", userId);
+        User linkedUser = user("jane", "jane@example.com", Role.ADMIN);
+        StaffResponseDto response = new StaffResponseDto(staffId, "Jane", "Roe", 6500.0, "Supervisor",
+                LocalDate.of(2024, 2, 1), null, "CIN-NEW", null, null, userId);
 
         when(staffRepository.findById(staffId)).thenReturn(Optional.of(existing));
-        when(staffRepository.existsByCinIgnoreCaseAndIdNot("CIN2", staffId)).thenReturn(false);
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(staffMapper.updateEntity(dto, existing)).thenReturn(existing);
-        when(staffRepository.save(existing)).thenReturn(saved);
-        when(staffMapper.toDto(saved)).thenReturn(expected);
+        when(staffRepository.existsByCinIgnoreCaseAndIdNot(dto.getCin(), staffId)).thenReturn(false);
+        doAnswer(invocation -> {
+            StaffRequestDto request = invocation.getArgument(0);
+            Staff entity = invocation.getArgument(1);
+            entity.setFirstName(request.getFirstName());
+            entity.setLastName(request.getLastName());
+            entity.setSalary(request.getSalary());
+            entity.setPosition(request.getPosition());
+            entity.setDateJoined(request.getDateJoined());
+            entity.setDateLeft(request.getDateLeft());
+            entity.setCin(request.getCin());
+            return entity;
+        }).when(staffMapper).updateEntity(dto, existing);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(linkedUser));
+        when(staffRepository.save(any(Staff.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(staffMapper.toDto(any(Staff.class))).thenReturn(response);
 
-        StaffResponseDto result = staffCustomerService.updateStaff(staffId, dto);
+        StaffResponseDto result = service.updateStaff(staffId, dto);
 
-        assertThat(result).isSameAs(expected);
-        assertThat(existing.getUser()).isSameAs(user);
+        assertThat(existing.getCin()).isEqualTo("CIN-NEW");
+        assertThat(existing.getUser()).isSameAs(linkedUser);
+        assertThat(result).isSameAs(response);
+        verify(staffRepository).save(existing);
     }
 
     @Test
-    void createUser_success_usesDefaultRole() {
-        UserRequestDto dto = new UserRequestDto("john", "Passw0rd!", "john@example.com", null);
-        User entity = new User();
-        User saved = new User();
-        saved.setId(UUID.randomUUID());
-        saved.setUsername("john");
-        saved.setPasswordHash("encoded");
-        saved.setEmail("john@example.com");
-        saved.setRoles(Role.CUSTOMER);
-        UserResponseDto expected = new UserResponseDto(saved.getId(), saved.getUsername(), saved.getEmail(), saved.getRoles(), null, null);
-
-        when(userRepository.existsByEmail("john@example.com")).thenReturn(false);
-        when(userRepository.existsByUsername("john")).thenReturn(false);
-        when(userMapper.toEntity(dto)).thenReturn(entity);
-        when(passwordEncoder.encode("Passw0rd!")).thenReturn("encoded");
-        when(userRepository.save(entity)).thenReturn(saved);
-        when(userMapper.toDto(saved)).thenReturn(expected);
-
-        UserResponseDto result = staffCustomerService.createUser(dto);
-
-        assertThat(result).isSameAs(expected);
-        assertThat(entity.getPasswordHash()).isEqualTo("encoded");
-        assertThat(entity.getRoles()).isEqualTo(Role.CUSTOMER);
-    }
-
-    @Test
-    void deleteStaff_whenMissing_throws() {
+    void deleteStaff_deletesExistingStaff() {
         UUID id = UUID.randomUUID();
-        when(staffRepository.existsById(id)).thenReturn(false);
 
-        assertThatThrownBy(() -> staffCustomerService.deleteStaff(id))
-                .isInstanceOf(jakarta.persistence.EntityNotFoundException.class)
-                .hasMessageContaining("Staff not found");
+        when(staffRepository.existsById(id)).thenReturn(true);
 
-        verify(staffRepository, never()).deleteById(any());
+        service.deleteStaff(id);
+
+        verify(staffRepository).deleteById(id);
+    }
+
+    @Test
+    void getAllUsers_returnsMappedUsers() {
+        User user = user("alice", "alice@example.com", Role.CUSTOMER);
+        UserResponseDto response = new UserResponseDto(user.getId(), "alice", "alice@example.com", Role.CUSTOMER, null, null);
+
+        when(userRepository.findAll()).thenReturn(List.of(user));
+        when(userMapper.toDto(List.of(user))).thenReturn(List.of(response));
+
+        List<UserResponseDto> result = service.getAllUsers();
+
+        assertThat(result).containsExactly(response);
+        verify(userRepository).findAll();
+    }
+
+    @Test
+    void createUser_hashesPasswordAndDefaultsRole() {
+        UserRequestDto dto = new UserRequestDto("alice", "Password1!", "alice@example.com", null);
+        User mapped = user("alice", "alice@example.com", null);
+        UserResponseDto response = new UserResponseDto(UUID.randomUUID(), "alice", "alice@example.com", Role.CUSTOMER, null, null);
+
+        when(userRepository.existsByEmail(dto.getEmail())).thenReturn(false);
+        when(userRepository.existsByUsername(dto.getUsername())).thenReturn(false);
+        when(userMapper.toEntity(dto)).thenReturn(mapped);
+        when(passwordEncoder.encode(dto.getPassword())).thenReturn("hashed-password");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userMapper.toDto(any(User.class))).thenReturn(response);
+
+        UserResponseDto result = service.createUser(dto);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getPasswordHash()).isEqualTo("hashed-password");
+        assertThat(captor.getValue().getRoles()).isEqualTo(Role.CUSTOMER);
+        assertThat(result).isSameAs(response);
+    }
+
+    @Test
+    void updateUser_replacesPasswordWhenProvided() {
+        UUID id = UUID.randomUUID();
+        User existing = user("old", "old@example.com", Role.ADMIN);
+        UserRequestDto dto = new UserRequestDto("new", "NewPass1!", "new@example.com", null);
+        UserResponseDto response = new UserResponseDto(id, "new", "new@example.com", Role.ADMIN, null, null);
+
+        when(userRepository.findById(id)).thenReturn(Optional.of(existing));
+        when(userRepository.existsByEmailIgnoreCaseAndIdNot(dto.getEmail(), id)).thenReturn(false);
+        when(userRepository.existsByUsernameAndIdNot(dto.getUsername(), id)).thenReturn(false);
+        doAnswer(invocation -> {
+            UserRequestDto request = invocation.getArgument(0);
+            User entity = invocation.getArgument(1);
+            entity.setUsername(request.getUsername());
+            entity.setEmail(request.getEmail());
+            return entity;
+        }).when(userMapper).updateEntity(dto, existing);
+        when(passwordEncoder.encode(dto.getPassword())).thenReturn("new-hash");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userMapper.toDto(any(User.class))).thenReturn(response);
+
+        UserResponseDto result = service.updateUser(id, dto);
+
+        assertThat(existing.getUsername()).isEqualTo("new");
+        assertThat(existing.getEmail()).isEqualTo("new@example.com");
+        assertThat(existing.getPasswordHash()).isEqualTo("new-hash");
+        assertThat(result).isSameAs(response);
+    }
+
+    @Test
+    void deleteUser_deletesExistingUser() {
+        UUID id = UUID.randomUUID();
+
+        when(userRepository.existsById(id)).thenReturn(true);
+
+        service.deleteUser(id);
+
+        verify(userRepository).deleteById(id);
+    }
+
+    @Test
+    void createStaff_duplicateCin_throwsIllegalArgumentException() {
+        StaffRequestDto dto = new StaffRequestDto("John", "Doe", 5000.0, "Manager",
+                LocalDate.of(2024, 1, 10), null, "CIN-001", null);
+
+        when(staffRepository.existsByCinIgnoreCase(dto.getCin())).thenReturn(true);
+
+        assertThatThrownBy(() -> service.createStaff(dto))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("CIN already exists: CIN-001");
+
+        verify(staffMapper, never()).toEntity(any());
+    }
+
+    private static User user(String username, String email, Role role) {
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        user.setUsername(username);
+        user.setEmail(email);
+        user.setRoles(role);
+        user.setPasswordHash("hashed");
+        return user;
+    }
+
+    private static Staff staff(String cin) {
+        Staff staff = new Staff();
+        staff.setId(UUID.randomUUID());
+        staff.setFirstName("John");
+        staff.setLastName("Doe");
+        staff.setSalary(5000.0);
+        staff.setPosition("Manager");
+        staff.setDateJoined(LocalDate.of(2024, 1, 10));
+        staff.setCin(cin);
+        return staff;
     }
 }

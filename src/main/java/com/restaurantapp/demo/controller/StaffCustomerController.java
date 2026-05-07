@@ -27,7 +27,8 @@ public class StaffCustomerController {
 
     @PostMapping("/staff")
     public ResponseEntity<StaffResponseDto> createStaff(@Valid @RequestBody StaffRequestDto dto) {
-        return ResponseEntity.ok(staffCustomerService.createStaff(dto));
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED)
+                .body(staffCustomerService.createStaff(dto));
     }
 
     @PutMapping("/staff/{id}")

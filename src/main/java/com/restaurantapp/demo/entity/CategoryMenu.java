@@ -30,13 +30,12 @@ public class CategoryMenu {
     private String categoryName;
 
     @NotNull
-    @Column(name = "sort_order" , unique = true)
+    @Column(name = "sort_order" , unique = true, nullable = false)
     @Positive(message = "sortOrder must be a positive number (greater than 0)")
     private Integer sortOrder;
 
-
     @NotNull
-    private Boolean active;
+    private Boolean active=true;
 
     @CreatedDate
     @Column( name = "created_at", nullable = false, updatable = false)

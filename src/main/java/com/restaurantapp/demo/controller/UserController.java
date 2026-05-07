@@ -1,6 +1,7 @@
 package com.restaurantapp.demo.controller;
 
 import com.restaurantapp.demo.dto.ResponseDto.UserResponseDto;
+import com.restaurantapp.demo.dto.ResponseDto.UserWithRoleInfoResponseDto;
 import com.restaurantapp.demo.dto.requestDto.UserRequestDto;
 import com.restaurantapp.demo.service.UserService;
 import jakarta.validation.Valid;
@@ -24,10 +25,16 @@ public class UserController {
         return ResponseEntity.ok(userManagementService.getAllUsers());
     }
 
+    @GetMapping("/details")
+    public ResponseEntity<List<UserWithRoleInfoResponseDto>> getAllUsersWithRoleInfo() {
+        return ResponseEntity.ok(userManagementService.getAllUsersWithRoleInfo());
+    }
+
 
     @PostMapping
     public ResponseEntity<UserResponseDto> createUser(@Valid @RequestBody UserRequestDto dto) {
-        return ResponseEntity.ok(userManagementService.createUser(dto));
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED)
+                .body(userManagementService.createUser(dto));
     }
 
     @PutMapping("/{id}")

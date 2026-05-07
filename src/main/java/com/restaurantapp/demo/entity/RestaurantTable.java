@@ -15,7 +15,14 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "restaurant_tables", indexes = { @Index(name = "idx_tables_public_code", columnList = "public_code"), @Index(name = "idx_tables_user", columnList = "user_id"), @Index(name = "idx_tables_active", columnList = "active"), @Index(name = "idx_tables_status", columnList = "status"), @Index(name = "idx_tables_seats", columnList = "seats") })
+@Table(name = "restaurant_tables",
+        indexes = {
+        @Index(name = "idx_tables_public_code", columnList = "public_code"),
+        @Index(name = "idx_tables_user", columnList = "user_id"),
+        @Index(name = "idx_tables_active", columnList = "active"),
+        @Index(name = "idx_tables_status", columnList = "status"),
+        @Index(name = "idx_tables_seats", columnList = "seats")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -39,6 +46,7 @@ public class RestaurantTable {
 
     private Boolean active;
 
+    @Enumerated(EnumType.STRING)
     private TableStatus status;
 
     @CreatedDate

@@ -35,7 +35,8 @@ public class OrderController {
 
     @PostMapping
     public ResponseEntity<OrderResponseDto> createOrder(@Valid @RequestBody OrderRequestDto dto) {
-        return ResponseEntity.ok(orderManagementService.createOrder(dto));
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED)
+                .body(orderManagementService.createOrder(dto));
     }
 
     @PutMapping("/{id}")
@@ -64,7 +65,8 @@ public class OrderController {
 
     @PostMapping("/items")
     public ResponseEntity<OrderItemResponseDto> createOrderItem(@Valid @RequestBody OrderItemRequestDto dto) {
-        return ResponseEntity.ok(orderManagementService.createOrderItem(dto));
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED)
+                .body(orderManagementService.createOrderItem(dto));
     }
 
     @PutMapping("/items/{id}")

@@ -34,7 +34,8 @@ public class RestaurantTableController {
     public ResponseEntity<RestaurantTableResponseDto> createTable(
             @Valid @RequestBody RestaurantTableRequestDto dto
     ) {
-        return ResponseEntity.ok(restaurantTableService.createTable(dto));
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED)
+                .body(restaurantTableService.createTable(dto));
     }
 
     @PutMapping("/{id}")

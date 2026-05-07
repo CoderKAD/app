@@ -1,6 +1,7 @@
 package com.restaurantapp.demo.mapper;
 
 import com.restaurantapp.demo.dto.ResponseDto.ReservationResponseDto;
+import com.restaurantapp.demo.dto.ResponseDto.ReservationSelectedTableDto;
 import com.restaurantapp.demo.dto.requestDto.ReservationRequestDto;
 import com.restaurantapp.demo.entity.Reservation;
 import com.restaurantapp.demo.entity.RestaurantTable;
@@ -10,7 +11,6 @@ import org.mapstruct.MappingTarget;
 import org.mapstruct.Named;
 
 import java.util.List;
-import java.util.UUID;
 
 @Mapper(componentModel = "spring")
 public interface ReservationMapper {
@@ -19,23 +19,25 @@ public interface ReservationMapper {
 
     void updateEntity(ReservationRequestDto dto, @MappingTarget Reservation entity);
 
+    @Mapping(target = "reservationId", source = "id")
     @Mapping(target = "createdById", source = "createdBy.id")
     @Mapping(target = "updatedById", source = "updatedBy.id")
-    @Mapping(target = "tableIds", source = "tables", qualifiedByName = "mapTablesToIds")
+    @Mapping(target = "selectedTables", source = "tables", qualifiedByName = "mapTablesToSelectedTableDtos")
     ReservationResponseDto toDto(Reservation entity);
 
+    @Mapping(target = "reservationId", source = "id")
     @Mapping(target = "createdById", source = "createdBy.id")
     @Mapping(target = "updatedById", source = "updatedBy.id")
-    @Mapping(target = "tableIds", source = "tables", qualifiedByName = "mapTablesToIds")
+    @Mapping(target = "selectedTables", source = "tables", qualifiedByName = "mapTablesToSelectedTableDtos")
     List<ReservationResponseDto> toDto(List<Reservation> entity);
 
-    @Named("mapTablesToIds")
-    default List<UUID> mapTablesToIds(List<RestaurantTable> tables) {
+    @Named("mapTablesToSelectedTableDtos")
+    default List<ReservationSelectedTableDto> mapTablesToSelectedTableDtos(List<RestaurantTable> tables) {
         if (tables == null) {
             return null;
         }
         return tables.stream()
-                .map(RestaurantTable::getId)
+                .map(table -> new ReservationSelectedTableDto(table.getId(), table.getPublicCode()))
                 .toList();
     }
 }

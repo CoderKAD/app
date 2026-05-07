@@ -39,12 +39,12 @@ public class Reservation {
     @Column(name = "reservation_code", unique = true)
     private String reservationCode;
 
-    @Min(1)
-    @Max(50)
+    @Min(value = 1, message = "At least 1 person is required")
+    @Max(value = 50, message = "Maximum 50 people allowed")
     @Column(name = "number_of_people", nullable = false)
     private Integer numberOfPeople;
 
-    @NotBlank
+    @NotBlank(message = "customer Name is required")
     @Size(min = 2, max = 50)
     @Column(name = "customer_name", nullable = false)
     private String customerName;
@@ -54,8 +54,10 @@ public class Reservation {
     @Column(name = "customer_phone", nullable = false)
     private String customerPhone;
 
-    @Email
-    @Column(name = "email_customer")
+
+    @Email(message = "Invalid email")
+    @NotBlank(message = "Email is required")
+    @Column(name = "email_customer" , unique = true, nullable = false)
     private String emailCustomer;
 
     // -------------------------
@@ -71,9 +73,9 @@ public class Reservation {
     @Column(name = "end_at", nullable = false)
     private LocalDateTime endAt;
 
-    @Min(60)
-    @Column(name = "duration_minutes")
-    private Integer durationMinutes = 60;
+    @Min(value = 1, message = "Duration must be at least 1 minute")
+    @Column(name = "duration_reservation_minutes")
+    private Integer durationReservationMinutes = 60;
 
     // -------------------------
     // STATUS
@@ -111,9 +113,6 @@ public class Reservation {
 
     @Column(name = "cancel_reason")
     private String cancelReason;
-
-    @Column(name = "buffer_time_minutes")
-    private Integer bufferTimeMinutes = 30;
 
     // -------------------------
     // RELATIONS

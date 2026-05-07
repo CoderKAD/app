@@ -15,8 +15,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalTime;
-
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -55,11 +53,5 @@ public class AuthController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
         }
         return ResponseEntity.ok(new LoginResponse(null, user.getRoles()));
-    }
-    @GetMapping("/test")
-    public LocalTime test() {
-        LocalTime open = LocalTime.of(10, 0);
-        System.out.println(open);
-        return open;
     }
 }

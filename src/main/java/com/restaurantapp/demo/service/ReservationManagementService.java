@@ -2,405 +2,321 @@ package com.restaurantapp.demo.service;
 
 import com.restaurantapp.demo.dto.ResponseDto.ReservationDemandResponseDto;
 import com.restaurantapp.demo.dto.ResponseDto.ReservationResponseDto;
+import com.restaurantapp.demo.dto.ResponseDto.ReservationSelectedTableDto;
 import com.restaurantapp.demo.dto.requestDto.ReservationDemandRequestDto;
 import com.restaurantapp.demo.dto.requestDto.ReservationRequestDto;
+import com.restaurantapp.demo.dto.requestDto.ReservationStatusUpdateRequestDto;
 import com.restaurantapp.demo.entity.Reservation;
-import com.restaurantapp.demo.entity.ReservationDemand;
 import com.restaurantapp.demo.entity.RestaurantTable;
 import com.restaurantapp.demo.entity.User;
+import com.restaurantapp.demo.entity.enums.TableStatus;
 import com.restaurantapp.demo.entity.enums.ReservationStatus;
 import com.restaurantapp.demo.exception.ConflictException;
-import com.restaurantapp.demo.mapper.ReservationDemandMapper;
-import com.restaurantapp.demo.mapper.ReservationMapper;
-import com.restaurantapp.demo.repository.ReservationDemandRepository;
 import com.restaurantapp.demo.repository.ReservationRepository;
 import com.restaurantapp.demo.repository.RestaurantTableRepository;
 import com.restaurantapp.demo.repository.UserRepository;
+import com.restaurantapp.demo.util.PhoneNumberUtils;
 import com.restaurantapp.demo.util.PublicCodeGenerator;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class ReservationManagementService {
-
     private final ReservationRepository reservationRepository;
-    private final ReservationDemandRepository reservationDemandRepository;
-    private final RestaurantTableRepository restaurantTableRepository;
+    private final RestaurantTableRepository tableRepository;
     private final UserRepository userRepository;
-    private final ReservationMapper reservationMapper;
-    private final ReservationDemandMapper reservationDemandMapper;
+
+    private static final LocalTime OPEN_TIME = LocalTime.of(12, 0);
+    private static final LocalTime CLOSE_TIME = LocalTime.of(21, 0);
+    private static final String MOROCCO_REGION_CODE = "MA";
 
     public List<ReservationResponseDto> getAllReservations() {
-        return reservationMapper.toDto(sortReservations(reservationRepository.findAll()));
+        return reservationRepository.findAll().stream()
+                .map(this::mapToResponse)
+                .toList();
     }
 
-    public ReservationResponseDto getReservationById(UUID id) {
-        return reservationMapper.toDto(findReservationById(id));
-    }
+    public ReservationResponseDto createReservation(ReservationRequestDto dto) {
 
-    public ReservationResponseDto getReservationByCode(String code) {
-        return reservationMapper.toDto(findReservationByCode(code));
-    }
+        // =========================
+        // 0. VALIDATE PHONE NUMBER (MANDATORY)
+        // =========================
+        validatePhoneNumber(dto.getCustomerPhone());
 
-    public List<ReservationResponseDto> getReservationsByCustomerPhone(String phone) {
-        validatePhone(phone);
-        return reservationMapper.toDto(sortReservations(findReservationsByCustomerPhone(phone)));
-    }
-
-    public List<ReservationResponseDto> getUpcomingReservations(UUID userId) {
-        findUserById(userId);
-
+        // =========================
+        // 1. VALIDATE TIME
+        // =========================
         LocalDateTime now = LocalDateTime.now();
-        List<Reservation> reservations = reservationRepository.findAll().stream()
-                .filter(reservation -> reservation.getCreatedBy() != null
-                        && Objects.equals(reservation.getCreatedBy().getId(), userId))
-                .filter(reservation -> reservation.getStartAt() != null && !reservation.getStartAt().isBefore(now))
-                .filter(reservation -> reservation.getStatus() != ReservationStatus.CANCELLED)
-                .sorted(Comparator.comparing(Reservation::getStartAt, Comparator.nullsLast(Comparator.naturalOrder())))
+
+        if (dto.getStartAt().isBefore(now)) {
+            throw new IllegalArgumentException("Reservation must be in the future.");
+        }
+
+        LocalTime startTime = dto.getStartAt().toLocalTime();
+
+        if (startTime.isBefore(OPEN_TIME) || startTime.isAfter(CLOSE_TIME)) {
+            throw new IllegalArgumentException("Reservation must be between 12:00 and 21:00.");
+        }
+
+        // =========================
+        // 2. CALCULATE END TIME
+        // =========================
+        LocalDateTime endAt = dto.getStartAt()
+                .plusMinutes(dto.getDurationReservationMinutes())
+                .plusMinutes(60); // cleaning time
+
+        // =========================
+        // 3. LOAD AVAILABLE TABLES
+        // =========================
+        List<RestaurantTable> allTables = tableRepository.findAll();
+
+        List<RestaurantTable> availableTables = allTables.stream()
+                .filter(RestaurantTable::getActive)
+                .filter(table -> isTableAvailable(table, dto.getStartAt(), endAt))
+                .sorted((a, b) -> a.getSeats().compareTo(b.getSeats())) // smallest first
                 .toList();
 
-        return reservationMapper.toDto(reservations);
-    }
+        if (availableTables.isEmpty()) {
+            throw new ConflictException("All restaurant tables are fully reserved at this time.");
+        }
 
-    @Transactional
-    public ReservationResponseDto createReservation(ReservationRequestDto dto) {
-        validateReservationRequest(dto);
+        // =========================
+        // 4. SELECT OPTIMAL TABLES
+        // =========================
+        List<RestaurantTable> selectedTables = new ArrayList<>();
+        int totalSeats = 0;
 
-        Reservation reservation = reservationMapper.toEntity(dto);
-        reservation.setId(null);
+        for (RestaurantTable table : availableTables) {
+            selectedTables.add(table);
+            totalSeats += table.getSeats();
+
+            if (totalSeats >= dto.getNumberOfPeople()) {
+                break;
+            }
+        }
+
+        // =========================
+        // 5. CAPACITY CHECK
+        // =========================
+        if (totalSeats < dto.getNumberOfPeople()) {
+            throw new ConflictException(
+                    "Only " + totalSeats + " seats are available, not enough for " + dto.getNumberOfPeople() + " people."
+            );
+        }
+
+        // =========================
+        // 6. CREATE RESERVATION
+        // =========================
+        Reservation reservation = new Reservation();
         reservation.setReservationCode(generatePublicCode());
+        reservation.setNumberOfPeople(dto.getNumberOfPeople());
+        reservation.setCustomerName(dto.getCustomerName());
+        reservation.setCustomerPhone(dto.getCustomerPhone()); // Store original input
+        reservation.setEmailCustomer(dto.getEmailCustomer());
+        reservation.setStartAt(dto.getStartAt());
+        reservation.setEndAt(endAt);
+        reservation.setDurationReservationMinutes(dto.getDurationReservationMinutes());
+        reservation.setNotes(dto.getNotes());
+        reservation.setStatus(ReservationStatus.PENDING);
+        reservation.setTables(selectedTables);
 
-        applyReservationUsers(reservation, dto.getCreatedById(), dto.getUpdatedById(), true);
-        reservation.setTables(loadTablesByIds(dto.getTableIds()));
-        assertSelectedTablesCanHostParty(reservation.getTables(), dto.getNumberOfPeople());
-        assertTablesAvailable(reservation.getTables(), dto.getStartAt(), dto.getEndAt(), null);
-        applyStatusTimestamps(reservation);
+        if (dto.getCreatedById() != null) {
+            User user = userRepository.findById(dto.getCreatedById())
+                    .orElseThrow(() -> new EntityNotFoundException("User not found"));
+            reservation.setCreatedBy(user);
+        }
 
-        return reservationMapper.toDto(reservationRepository.save(reservation));
+        Reservation saved = reservationRepository.save(reservation);
+
+        // =========================
+        // 7. BUILD RESPONSE
+        // =========================
+        return mapToResponse(saved);
     }
 
     @Transactional
-    public ReservationResponseDto updateReservation(UUID id, ReservationRequestDto dto) {
-        validateReservationRequest(dto);
+    public ReservationResponseDto updateReservation(UUID reservationId, ReservationStatusUpdateRequestDto dto) {
+        if (dto == null || dto.getStatus() == null) {
+            throw new IllegalArgumentException("Reservation status is required.");
+        }
 
-        Reservation reservation = findReservationById(id);
-        ensureReservationUpdatable(reservation);
+        Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new EntityNotFoundException("Reservation not found with id: " + reservationId));
 
-        User existingCreatedBy = reservation.getCreatedBy();
-        User existingUpdatedBy = reservation.getUpdatedBy();
+        ReservationStatus currentStatus = reservation.getStatus();
+        ReservationStatus targetStatus = dto.getStatus();
 
-        reservationMapper.updateEntity(dto, reservation);
-        reservation.setCreatedBy(dto.getCreatedById() != null ? findUserById(dto.getCreatedById()) : existingCreatedBy);
-        reservation.setUpdatedBy(dto.getUpdatedById() != null ? findUserById(dto.getUpdatedById()) : existingUpdatedBy);
-        reservation.setTables(loadTablesByIds(dto.getTableIds()));
-        assertSelectedTablesCanHostParty(reservation.getTables(), dto.getNumberOfPeople());
-        assertTablesAvailable(reservation.getTables(), dto.getStartAt(), dto.getEndAt(), reservation.getId());
-        applyStatusTimestamps(reservation);
+        if (currentStatus == targetStatus) {
+            return mapToResponse(reservation);
+        }
 
-        return reservationMapper.toDto(reservationRepository.save(reservation));
+        validateStatusTransition(currentStatus, targetStatus);
+
+        if (dto.getUpdatedById() != null) {
+            User user = userRepository.findById(dto.getUpdatedById())
+                    .orElseThrow(() -> new EntityNotFoundException("User not found"));
+            reservation.setUpdatedBy(user);
+        }
+
+        switch (targetStatus) {
+            case CONFIRMED -> {
+                reservation.setStatus(ReservationStatus.CONFIRMED);
+                reservation.setConfirmedAt(LocalDateTime.now());
+                reservation.setCancelledAt(null);
+                reservation.setCancelReason(null);
+                updateTableStatuses(reservation.getTables(), TableStatus.Reserved);
+            }
+            case CANCELLED -> {
+                if (dto.getCancelReason() == null || dto.getCancelReason().isBlank()) {
+                    throw new IllegalArgumentException("Cancel reason is required when cancelling a reservation.");
+                }
+                reservation.setStatus(ReservationStatus.CANCELLED);
+                reservation.setCancelledAt(LocalDateTime.now());
+                reservation.setCancelReason(dto.getCancelReason().trim());
+                updateTableStatuses(reservation.getTables(), TableStatus.Available);
+            }
+            case COMPLETED -> {
+                reservation.setStatus(ReservationStatus.COMPLETED);
+                reservation.setCancelReason(null);
+                reservation.setCancelledAt(null);
+                updateTableStatuses(reservation.getTables(), TableStatus.Available);
+            }
+            default -> throw new IllegalArgumentException("Unsupported reservation status: " + targetStatus);
+        }
+
+        return mapToResponse(reservationRepository.save(reservation));
     }
 
     @Transactional
-    public ReservationResponseDto confirmReservation(UUID id, UUID confirmedByUserId) {
-        Reservation reservation = findReservationById(id);
-        ensureCanTransition(reservation, ReservationStatus.PENDING, "confirmed");
+    public void deleteReservation(UUID reservationId) {
+        Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new EntityNotFoundException("Reservation not found with id: " + reservationId));
 
-        if (confirmedByUserId != null) {
-            reservation.setUpdatedBy(findUserById(confirmedByUserId));
+        updateTableStatuses(reservation.getTables(), TableStatus.Available);
+        if (reservation.getTables() != null && !reservation.getTables().isEmpty()) {
+            tableRepository.saveAll(reservation.getTables());
         }
 
-        reservation.setStatus(ReservationStatus.CONFIRMED);
-        reservation.setConfirmedAt(LocalDateTime.now());
-        reservation.setCancelledAt(null);
-        reservation.setCancelReason(null);
-
-        return reservationMapper.toDto(reservationRepository.save(reservation));
-    }
-
-    @Transactional
-    public ReservationResponseDto cancelReservation(UUID id, String reason, UUID cancelledByUserId) {
-        Reservation reservation = findReservationById(id);
-
-        if (reservation.getStatus() == ReservationStatus.CANCELLED) {
-            throw new ConflictException("Reservation is already cancelled.");
-        }
-        if (reservation.getStatus() == ReservationStatus.COMPLETED) {
-            throw new ConflictException("Completed reservations cannot be cancelled.");
-        }
-
-        if (cancelledByUserId != null) {
-            reservation.setUpdatedBy(findUserById(cancelledByUserId));
-        }
-
-        reservation.setStatus(ReservationStatus.CANCELLED);
-        reservation.setCancelledAt(LocalDateTime.now());
-        reservation.setCancelReason(reason);
-
-        return reservationMapper.toDto(reservationRepository.save(reservation));
-    }
-
-    @Transactional
-    public void deleteReservation(UUID id) {
-        Reservation reservation = findReservationById(id);
-        if (reservation.getStatus() != ReservationStatus.PENDING && reservation.getStatus() != ReservationStatus.CANCELLED) {
-            throw new ConflictException("Only pending or cancelled reservations can be deleted.");
-        }
         reservationRepository.delete(reservation);
     }
 
-    public boolean isAvailable(Integer numberOfPeople, LocalDateTime startAt, LocalDateTime endAt) {
-        validateAvailabilityRequest(numberOfPeople, startAt, endAt);
+    // =========================
+    // PHONE NUMBER VALIDATION (MANDATORY FOR MOROCCO)
+    // =========================
+    private void validatePhoneNumber(String phoneNumber) {
+        if (phoneNumber == null || phoneNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("Phone number is mandatory for reservation.");
+        }
 
-        List<RestaurantTable> candidateTables = restaurantTableRepository.findAll().stream()
-                .filter(table -> Boolean.TRUE.equals(table.getActive()))
-                .filter(table -> table.getSeats() != null && table.getSeats() > 0)
-                .sorted(Comparator.comparing(RestaurantTable::getSeats, Comparator.nullsLast(Comparator.reverseOrder())))
-                .toList();
+        String normalizedPhone = PhoneNumberUtils.normalize(phoneNumber.trim(), MOROCCO_REGION_CODE);
+        // If normalize succeeds, phone is valid. Store normalized version if needed.
+    }
 
-        int seated = 0;
-        for (RestaurantTable table : candidateTables) {
-            if (!hasConflictingReservation(table.getId(), startAt, endAt, null)) {
-                seated += table.getSeats();
-                if (seated >= numberOfPeople) {
-                    return true;
-                }
+    private void validateStatusTransition(ReservationStatus currentStatus, ReservationStatus targetStatus) {
+        if (currentStatus == null) {
+            throw new IllegalArgumentException("Current reservation status is required.");
+        }
+
+        boolean allowed = switch (currentStatus) {
+            case PENDING -> targetStatus == ReservationStatus.CONFIRMED || targetStatus == ReservationStatus.CANCELLED;
+            case CONFIRMED -> targetStatus == ReservationStatus.CANCELLED || targetStatus == ReservationStatus.COMPLETED;
+            case CANCELLED, NO_SHOW, COMPLETED -> false;
+        };
+
+        if (!allowed) {
+            throw new ConflictException(
+                    "Cannot change reservation status from " + currentStatus + " to " + targetStatus + "."
+            );
+        }
+    }
+
+    private void updateTableStatuses(List<RestaurantTable> tables, TableStatus tableStatus) {
+        if (tables == null) {
+            return;
+        }
+
+        for (RestaurantTable table : tables) {
+            if (table != null) {
+                table.setStatus(tableStatus);
             }
         }
-
-        return false;
     }
 
-    public List<ReservationDemandResponseDto> getAllDemands() {
-        return reservationDemandMapper.toDto(reservationDemandRepository.findAll());
+    // =========================
+    // TABLE AVAILABILITY CHECK
+    // =========================
+    private boolean isTableAvailable(RestaurantTable table,
+                                     LocalDateTime startAt,
+                                     LocalDateTime endAt) {
+
+        return table.getReservations().stream()
+                .noneMatch(res ->
+                        res.getStatus() != ReservationStatus.CANCELLED &&
+                                startAt.isBefore(res.getEndAt()) &&
+                                endAt.isAfter(res.getStartAt())
+                );
     }
 
-    public ReservationDemandResponseDto getDemandById(UUID id) {
-        return reservationDemandMapper.toDto(findReservationDemandById(id));
-    }
+    // =========================
+    // RESPONSE MAPPER
+    // =========================
+    private ReservationResponseDto mapToResponse(Reservation r) {
+        ReservationResponseDto dto = new ReservationResponseDto();
+        dto.setReservationId(r.getId());
+        dto.setReservationCode(r.getReservationCode());
+        dto.setNumberOfPeople(r.getNumberOfPeople());
+        dto.setCustomerName(r.getCustomerName());
 
-    @Transactional
-    public ReservationDemandResponseDto createDemand(ReservationDemandRequestDto dto) {
-        ReservationDemand demand = reservationDemandMapper.toEntity(dto);
-        demand.setId(null);
-        demand.setReservation(findReservationById(dto.getReservationId()));
-        demand.setUser(findUserById(dto.getUserId()));
-        return reservationDemandMapper.toDto(reservationDemandRepository.save(demand));
-    }
-
-    @Transactional
-    public ReservationDemandResponseDto updateDemand(UUID id, ReservationDemandRequestDto dto) {
-        ReservationDemand demand = findReservationDemandById(id);
-        reservationDemandMapper.updateEntity(dto, demand);
-        demand.setReservation(findReservationById(dto.getReservationId()));
-        demand.setUser(findUserById(dto.getUserId()));
-        return reservationDemandMapper.toDto(reservationDemandRepository.save(demand));
-    }
-
-    @Transactional
-    public void deleteDemand(UUID id) {
-        ReservationDemand demand = findReservationDemandById(id);
-        reservationDemandRepository.delete(demand);
-    }
-
-    private void validateReservationRequest(ReservationRequestDto dto) {
-        if (dto.getStartAt() == null || dto.getEndAt() == null) {
-            throw new IllegalArgumentException("Reservation start and end times are required.");
-        }
-        if (!dto.getEndAt().isAfter(dto.getStartAt())) {
-            throw new IllegalArgumentException("Reservation end time must be after the start time.");
-        }
-        if (dto.getTableIds() == null || dto.getTableIds().isEmpty()) {
-            throw new IllegalArgumentException("At least one table id is required.");
-        }
-        if (dto.getTableIds().size() != new HashSet<>(dto.getTableIds()).size()) {
-            throw new IllegalArgumentException("tableIds must not contain duplicates.");
-        }
-    }
-
-    private void validateAvailabilityRequest(Integer numberOfPeople, LocalDateTime startAt, LocalDateTime endAt) {
-        if (numberOfPeople == null || numberOfPeople < 1) {
-            throw new IllegalArgumentException("Number of people must be greater than zero.");
-        }
-        if (startAt == null || endAt == null) {
-            throw new IllegalArgumentException("Start and end times are required.");
-        }
-        if (!endAt.isAfter(startAt)) {
-            throw new IllegalArgumentException("Reservation end time must be after the start time.");
-        }
-    }
-
-    private void validatePhone(String phone) {
-        if (phone == null || phone.isBlank()) {
-            throw new IllegalArgumentException("Customer phone is required.");
-        }
-    }
-
-    private void ensureReservationUpdatable(Reservation reservation) {
-        if (reservation.getStatus() != ReservationStatus.PENDING) {
-            throw new ConflictException("Only pending reservations can be updated.");
-        }
-    }
-
-    private void ensureCanTransition(Reservation reservation, ReservationStatus expectedStatus, String actionDescription) {
-        if (reservation.getStatus() != expectedStatus) {
-            throw new ConflictException("Only " + expectedStatus.name().toLowerCase() + " reservations can be " + actionDescription + ".");
-        }
-    }
-
-    private List<Reservation> sortReservations(List<Reservation> reservations) {
-        return reservations.stream()
-                .sorted(Comparator.comparing(Reservation::getStartAt, Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList();
-    }
-
-    private Reservation findReservationById(UUID id) {
-        return reservationRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Reservation not found with id: " + id));
-    }
-
-    private Reservation findReservationByCode(String code) {
-        if (code == null || code.isBlank()) {
-            throw new IllegalArgumentException("Reservation code is required.");
+        // Return normalized Moroccan phone number in response
+        if (r.getCustomerPhone() != null) {
+            dto.setCustomerPhone(PhoneNumberUtils.normalize(r.getCustomerPhone(), MOROCCO_REGION_CODE));
         }
 
-        return reservationRepository.findAll().stream()
-                .filter(reservation -> reservation.getReservationCode() != null
-                        && reservation.getReservationCode().equalsIgnoreCase(code.trim()))
-                .findFirst()
-                .orElseThrow(() -> new EntityNotFoundException("Reservation not found with code: " + code));
-    }
+        dto.setEmailCustomer(r.getEmailCustomer());
+        dto.setStartAt(r.getStartAt());
+        dto.setEndAt(r.getEndAt());
+        dto.setDurationReservationMinutes(r.getDurationReservationMinutes());
+        dto.setStatus(r.getStatus());
+        dto.setNotes(r.getNotes());
+        dto.setConfirmedAt(r.getConfirmedAt());
+        dto.setCancelledAt(r.getCancelledAt());
+        dto.setCancelReason(r.getCancelReason());
+        dto.setCreatedAt(r.getCreatedAt());
+        dto.setUpdatedAt(r.getUpdatedAt());
+        dto.setCreatedById(r.getCreatedBy() != null ? r.getCreatedBy().getId() : null);
+        dto.setUpdatedById(r.getUpdatedBy() != null ? r.getUpdatedBy().getId() : null);
 
-    private List<Reservation> findReservationsByCustomerPhone(String phone) {
-        String normalizedPhone = normalizePhone(phone);
-        return reservationRepository.findAll().stream()
-                .filter(reservation -> normalizedPhone.equals(normalizePhone(reservation.getCustomerPhone())))
-                .sorted(Comparator.comparing(Reservation::getStartAt, Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList();
-    }
+        if (r.getTables() != null) {
+            List<ReservationSelectedTableDto> tables = r.getTables().stream()
+                    .map(t -> new ReservationSelectedTableDto(
+                            t.getId(),
+                            t.getPublicCode()
+                    ))
+                    .toList();
 
-    private ReservationDemand findReservationDemandById(UUID id) {
-        return reservationDemandRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("ReservationDemand not found with id: " + id));
-    }
-
-    private User findUserById(UUID id) {
-        return userRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + id));
-    }
-
-    private List<RestaurantTable> loadTablesByIds(List<UUID> tableIds) {
-        List<RestaurantTable> tables = new ArrayList<>();
-        Map<UUID, RestaurantTable> tableById = new HashMap<>();
-
-        for (RestaurantTable table : restaurantTableRepository.findAllById(tableIds)) {
-            tableById.put(table.getId(), table);
+            dto.setSelectedTables(tables);
         }
 
-        for (UUID tableId : tableIds) {
-            RestaurantTable table = tableById.get(tableId);
-            if (table == null) {
-                throw new EntityNotFoundException("RestaurantTable not found with id: " + tableId);
-            }
-            if (!Boolean.TRUE.equals(table.getActive())) {
-                throw new IllegalArgumentException("RestaurantTable is not active: " + tableId);
-            }
-            tables.add(table);
-        }
-
-        return tables;
+        return dto;
     }
 
-    private void assertSelectedTablesCanHostParty(List<RestaurantTable> tables, Integer numberOfPeople) {
-        int seats = tables.stream()
-                .map(RestaurantTable::getSeats)
-                .filter(Objects::nonNull)
-                .mapToInt(Integer::intValue)
-                .sum();
-
-        if (seats < numberOfPeople) {
-            throw new ConflictException("Selected tables do not have enough seats for " + numberOfPeople + " people.");
-        }
-    }
-
-    private void assertTablesAvailable(List<RestaurantTable> tables,
-                                       LocalDateTime startAt,
-                                       LocalDateTime endAt,
-                                       UUID reservationIdToIgnore) {
-        List<UUID> tableIds = tables.stream()
-                .map(RestaurantTable::getId)
-                .toList();
-
-        List<Reservation> overlappingReservations = reservationRepository
-                .findOverlappingReservationsForTables(tableIds, startAt, endAt);
-
-        boolean hasConflict = overlappingReservations.stream()
-                .filter(reservation -> reservation.getStatus() != ReservationStatus.CANCELLED)
-                .anyMatch(reservation -> reservationIdToIgnore == null
-                        || !reservationIdToIgnore.equals(reservation.getId()));
-
-        if (hasConflict) {
-            throw new ConflictException("One or more selected tables are already reserved for that time slot.");
-        }
-    }
-
-    private boolean hasConflictingReservation(UUID tableId,
-                                              LocalDateTime startAt,
-                                              LocalDateTime endAt,
-                                              UUID reservationIdToIgnore) {
-        return reservationRepository.findOverlappingReservations(tableId, startAt, endAt).stream()
-                .filter(reservation -> reservation.getStatus() != ReservationStatus.CANCELLED)
-                .anyMatch(reservation -> reservationIdToIgnore == null
-                        || !reservationIdToIgnore.equals(reservation.getId()));
-    }
-
-    private void applyReservationUsers(Reservation reservation, UUID createdById, UUID updatedById, boolean defaultUpdatedByToCreator) {
-        if (createdById != null) {
-            User creator = findUserById(createdById);
-            reservation.setCreatedBy(creator);
-            if (defaultUpdatedByToCreator && updatedById == null) {
-                reservation.setUpdatedBy(creator);
-            }
-        }
-
-        if (updatedById != null) {
-            reservation.setUpdatedBy(findUserById(updatedById));
-        }
-    }
-
-    private void applyStatusTimestamps(Reservation reservation) {
-        if (reservation.getStatus() == ReservationStatus.CONFIRMED && reservation.getConfirmedAt() == null) {
-            reservation.setConfirmedAt(LocalDateTime.now());
-            reservation.setCancelledAt(null);
-            reservation.setCancelReason(null);
-        } else if (reservation.getStatus() == ReservationStatus.CANCELLED && reservation.getCancelledAt() == null) {
-            reservation.setCancelledAt(LocalDateTime.now());
-            reservation.setConfirmedAt(null);
-        }
-    }
-
-    private String normalizePhone(String phone) {
-        if (phone == null) {
-            return null;
-        }
-        return phone.replaceAll("\\D+", "");
-    }
-
+    // =========================
+    // PUBLIC CODE GENERATOR
+    // =========================
     private String generatePublicCode() {
         long nextSequence = reservationRepository.count() + 1L;
-        return PublicCodeGenerator.generateReservationCode(nextSequence, reservationRepository::existsByReservationCode);
+        return PublicCodeGenerator.generateReservationCode(
+                nextSequence,
+                reservationRepository::existsByReservationCode
+        );
     }
 }

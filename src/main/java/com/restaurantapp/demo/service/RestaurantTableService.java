@@ -41,10 +41,8 @@ public class RestaurantTableService {
         table.setId(null);
         table.setPublicCode(generatePublicCode());
 
-        // Set user if provided and validate role
         if (dto.getUserId() != null) {
-            User user = findUserById(dto.getUserId());
-            table.setUser(user);
+            table.setUser(findAssignableUser(dto.getUserId()));
         }
 
         return restaurantTableMapper.toDto(restaurantTableRepository.save(table));
@@ -54,6 +52,7 @@ public class RestaurantTableService {
         validateTable(dto);
 
         RestaurantTable table = findTableById(id);
+        User currentUser = table.getUser();
         restaurantTableMapper.updateEntity(dto, table);
 
         // Generate public code if not set
@@ -61,12 +60,10 @@ public class RestaurantTableService {
             table.setPublicCode(generatePublicCode());
         }
 
-        // Set user if provided and validate role
         if (dto.getUserId() != null) {
-            User user = findUserById(dto.getUserId());
-            table.setUser(user);
+            table.setUser(findAssignableUser(dto.getUserId()));
         } else {
-            table.setUser(null);
+            table.setUser(currentUser);
         }
 
         return restaurantTableMapper.toDto(restaurantTableRepository.save(table));
@@ -89,6 +86,19 @@ public class RestaurantTableService {
     private User findUserById(UUID id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + id));
+    }
+
+    private User findAssignableUser(UUID id) {
+        User user = findUserById(id);
+        validateAssignableUser(user);
+        return user;
+    }
+
+    private void validateAssignableUser(User user) {
+        Role role = user.getRoles();
+        if (role != Role.ADMIN && role != Role.CASHIER) {
+            throw new IllegalArgumentException("Table manager must have ADMIN or CASHIER role.");
+        }
     }
 
     private String generatePublicCode() {

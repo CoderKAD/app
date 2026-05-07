@@ -12,6 +12,7 @@ import com.restaurantapp.demo.mapper.UserMapper;
 import com.restaurantapp.demo.repository.StaffRepository;
 import com.restaurantapp.demo.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class StaffCustomerService {
 
     private final StaffRepository staffRepository;
@@ -27,18 +29,7 @@ public class StaffCustomerService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
 
-    public StaffCustomerService(StaffRepository staffRepository,
-                                UserRepository userRepository,
-                                StaffMapper staffMapper,
-                                UserMapper userMapper,
-                                PasswordEncoder passwordEncoder
-                               ) {
-        this.staffRepository = staffRepository;
-        this.userRepository = userRepository;
-        this.staffMapper = staffMapper;
-        this.userMapper = userMapper;
-        this.passwordEncoder = passwordEncoder;
-    }
+
 
     public List<StaffResponseDto> getAllStaff() {
 

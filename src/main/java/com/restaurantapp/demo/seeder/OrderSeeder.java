@@ -13,7 +13,9 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 @Component
 public class OrderSeeder {
@@ -30,10 +32,20 @@ public class OrderSeeder {
 
     public List<Order> seed(List<User> users, List<RestaurantTable> tables) {
         if (orderRepository.count() > 0) {
-            return orderRepository.findAll();
+            return orderRepository.findAllBy().stream()
+                    .sorted(Comparator.comparing(Order::getPublicCode, Comparator.nullsLast(String::compareTo)))
+                    .toList();
         }
 
-        if (users.isEmpty()) {
+        List<User> sortedUsers = users == null ? Collections.emptyList() : users.stream()
+                .filter(Objects::nonNull)
+                .toList();
+        List<RestaurantTable> sortedTables = tables == null ? Collections.emptyList() : tables.stream()
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(RestaurantTable::getPublicCode, Comparator.nullsLast(String::compareTo)))
+                .toList();
+
+        if (sortedUsers.isEmpty()) {
             return Collections.emptyList();
         }
 
@@ -45,20 +57,23 @@ public class OrderSeeder {
         for (int index = 0; index < DEFAULT_ORDER_COUNT; index++) {
             Order order = new Order();
             OrderType type = types[index % types.length];
+            if (type == OrderType.DINE_IN && sortedTables.isEmpty()) {
+                type = OrderType.DELIVERY;
+            }
 
             order.setPublicCode(PublicCodeGenerator.generateOrderCode(index + 1L, orderRepository::existsByPublicCode));
             order.setTypeOrder(type);
             order.setStatus(statuses[index % statuses.length]);
             order.setPaymentStatus(paymentStatuses[index % paymentStatuses.length]);
             order.setNotes(faker.lorem().sentence(8));
-            order.setPhone(faker.phoneNumber().cellPhone());
-            order.setCreatedBy(users.get(index % users.size()));
-            order.setUpdatedBy(users.get((index + 1) % users.size()));
+            order.setCreatedBy(sortedUsers.get(index % sortedUsers.size()));
+            order.setUpdatedBy(sortedUsers.get((index + 1) % sortedUsers.size()));
 
             if (type == OrderType.DELIVERY) {
+                order.setPhone(faker.phoneNumber().cellPhone());
                 order.setDeliveryAddress(faker.address().fullAddress());
-            } else if (!tables.isEmpty()) {
-                order.setRestaurantTable(tables.get(index % tables.size()));
+            } else if (!sortedTables.isEmpty()) {
+                order.setRestaurantTable(sortedTables.get(index % sortedTables.size()));
             }
 
             orders.add(order);
