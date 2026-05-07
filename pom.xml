@@ -105,12 +105,12 @@
 			<artifactId>mockito-core</artifactId>
 			<version>5.12.0</version>
 		</dependency>
-		<dependency>
-			<groupId>org.testng</groupId>
-			<artifactId>testng</artifactId>
-			<version>RELEASE</version>
-			<scope>compile</scope>
-		</dependency>
+<!--		<dependency>-->
+<!--			<groupId>org.testng</groupId>-->
+<!--			<artifactId>testng</artifactId>-->
+<!--			<version>7.12.0</version>-->
+<!--			<scope>compile</scope>-->
+<!--		</dependency>-->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
@@ -120,7 +120,6 @@
 			<artifactId>junit-jupiter</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<!-- swagger -->
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
@@ -128,16 +127,17 @@
 		</dependency>
 
        <!-- flyway-->
+		<!-- https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-flyway -->
 		<dependency>
-			<groupId>org.flywaydb</groupId>
-			<artifactId>flyway-core</artifactId>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
 		</dependency>
-
+		<!-- https://mvnrepository.com/artifact/org.flywaydb/flyway-database-postgresql -->
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>
+			<scope>runtime</scope>
 		</dependency>
-
 
 
 	</dependencies>
